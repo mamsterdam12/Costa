@@ -1,0 +1,77 @@
+// Datamodel voor de volgende fase: Postgres op Railway.
+// De site draait nu nog op statische mock-data (src/lib/data.ts);
+// dit schema is de basis voor het aansluiten van een echte database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  region    String?
+  province  String?
+  bio       String?
+  createdAt DateTime @default(now())
+
+  forumPosts  ForumPost[]
+  replies     ForumReply[]
+  listings    Listing[]
+}
+
+model ForumPost {
+  id        String       @id @default(cuid())
+  title     String
+  category  String
+  body      String
+  region    String?
+  createdAt DateTime     @default(now())
+  author    User         @relation(fields: [authorId], references: [id])
+  authorId  String
+  replies   ForumReply[]
+}
+
+model ForumReply {
+  id        String    @id @default(cuid())
+  body      String
+  createdAt DateTime  @default(now())
+  post      ForumPost @relation(fields: [postId], references: [id])
+  postId    String
+  author    User      @relation(fields: [authorId], references: [id])
+  authorId  String
+}
+
+model Listing {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  region      String
+  description String
+  contact     String
+  createdAt   DateTime @default(now())
+  owner       User     @relation(fields: [ownerId], references: [id])
+  ownerId     String
+}
+
+model Article {
+  id        String   @id @default(cuid())
+  title     String
+  summary   String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  location    String
+  startsAt    DateTime
+  createdAt   DateTime @default(now())
+}
