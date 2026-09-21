@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Recursive region tree: Spain -> Costa del Sol -> Marbella -> Marbesa, etc.
+// Every touristic place gets its own slug/page, so the platform feels local
+// per region even though it's one shared database.
+model Region {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      Json // translations, e.g. { "nl": "Marbella", "en": "Marbella", "es": "Marbella" }
+  country   String   @default("ES")
+  latitude  Float?
+  longitude Float?
+
+  parentId String?
+  parent   Region?  @relation("RegionHierarchy", fields: [parentId], references: [id])
+  children Region[] @relation("RegionHierarchy")
+
+  events    Event[]
+  createdAt DateTime @default(now())
+}
+
+// Flat-with-optional-parent category tree, translatable per locale.
+model EventCategory {
+  id   String @id @default(cuid())
+  slug String @unique
+  name Json // translations, e.g. { "nl": "Sport & fitness", "en": "Sport & fitness" }
+
+  parentId String?
+  parent   EventCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children EventCategory[] @relation("CategoryHierarchy")
+
+  events Event[]
+}
+
+// A business or person that runs events. A Business elsewhere in the
+// platform can double as an Organizer (see concept doc §13); kept standalone
+// here since the wider Business model doesn't exist yet.
+model Organizer {
+  id      String  @id @default(cuid())
+  slug    String  @unique
+  name    String
+  website String?
+  claimed Boolean @default(false)
+
+  events    Event[]
+  createdAt DateTime @default(now())
+}
+
+enum EventStatus {
+  DRAFT // found by a script or added manually, awaiting review
+  PUBLISHED
+  ARCHIVED
+}
+
+// One visible occurrence of an event. `recurrenceRule` is descriptive
+// metadata for now (e.g. "WEEKLY;BYDAY=SU") describing how it repeats;
+// splitting this into full Organizer/EventSeries/EventInstance objects
+// (per the concept doc) is a later step once recurring events need to be
+// managed without re-entering every occurrence by hand.
+model Event {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       Json // translations, e.g. { "nl": "...", "en": "...", "es": "..." }
+  description Json // translations, same shape as title
+
+  startsAt       DateTime
+  endsAt         DateTime?
+  recurrenceRule String?
+
+  venueName String?
+  address   String?
+  latitude  Float?
+  longitude Float?
+
+  region   Region @relation(fields: [regionId], references: [id])
+  regionId String
+
+  category   EventCategory @relation(fields: [categoryId], references: [id])
+  categoryId String
+
+  organizer   Organizer? @relation(fields: [organizerId], references: [id])
+  organizerId String?
+
+  status EventStatus @default(PUBLISHED)
+
+  // Discovery/ingestion metadata, so a future script can upsert safely
+  // instead of creating duplicates, and so stale finds can be flagged.
+  sourceName String? // e.g. "manual", "eventbrite", "tevienes"
+  sourceUrl  String?
+  externalId String? // id/hash from the source
+  lastSeenAt DateTime? // last time a discovery run confirmed this still exists
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceName, externalId])
+  @@index([regionId, startsAt])
+  @@index([categoryId])
+}
