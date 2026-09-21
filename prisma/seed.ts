@@ -23,14 +23,6 @@ async function seedTranslation(
 }
 
 async function main() {
-  // One-time reset (requested 2026-09-21): wipe every previously-seeded
-  // event and its cached translations before reseeding below with a fresh
-  // set discovered via the SOURCE_DISCOVERY sources. This line is meant to
-  // be removed again once it's run once in production -- the seed script
-  // is otherwise idempotent-upsert-only and never deletes on its own.
-  await prisma.translation.deleteMany({ where: { entityType: "event" } });
-  await prisma.event.deleteMany({});
-
   // Clear any cached machine translations before reseeding the source
   // content below -- if a bad/stale source value was ever machine-
   // translated and cached, fixing the source alone wouldn't fix what's
