@@ -23,14 +23,15 @@ dat automatisch nieuwe events vindt.
 - **Meertaligheid** (`src/lib/translation.ts`): elke module slaat content
   op in precies één brontaal. Een vertaling naar een andere taal wordt
   lazy opgehaald: eerst de `Translation`-cache, en bij een cache-miss een
-  LLM-vertaling (Claude Haiku via `ANTHROPIC_API_KEY`) die meteen wordt
-  weggeschreven zodat elke vertaling maar één keer gegenereerd hoeft te
-  worden. Handmatig gecureerde vertalingen (zoals de EN/ES-teksten in de
+  LLM-vertaling (OpenAI, via `OPENAI_API_KEY` + `OPENAI_MODEL`) die meteen
+  wordt weggeschreven zodat elke vertaling maar één keer gegenereerd hoeft
+  te worden. Handmatig gecureerde vertalingen (zoals de EN/ES-teksten in de
   seed) staan met `source: HUMAN` in de cache en worden nooit overschreven
   door een machinevertaling. Nieuwe taal toevoegen (bv. Zweeds, Deens,
   Duits) vereist dus geen her-seeden — de cache vult zichzelf aan zodra
-  iemand die taal bezoekt. Zonder `ANTHROPIC_API_KEY` valt het systeem
-  terug op de brontekst (geen crash, gewoon nog niet vertaald).
+  iemand die taal bezoekt. Zonder `OPENAI_API_KEY`, of als de vertaling om
+  wat voor reden dan ook faalt (bv. onjuiste modelnaam), valt het systeem
+  terug op de brontekst (geen crash, gewoon nog niet vertaald — zie logs).
   Taal wisselen via `?lang=nl|en|es` in de URL.
 - **Klaar voor automatisering**: `Event` heeft `sourceName`, `sourceUrl`,
   `externalId` en `lastSeenAt`, met een unique constraint op
@@ -69,17 +70,18 @@ Postgres-database in hetzelfde project. Het pre-deploy commando voert bij
 elke deploy `prisma db push` en `prisma db seed` uit (idempotent, dus
 veilig om steeds opnieuw te draaien).
 
-## ANTHROPIC_API_KEY
+## OPENAI_API_KEY / OPENAI_MODEL
 
 Voor machine-vertaling van talen die niet in de seed zitten (alles behalve
-NL/EN/ES) moet `ANTHROPIC_API_KEY` gezet worden op de Costa-service in
-Railway. Zonder key werkt de site gewoon door, alleen blijft een
-niet-gecachede taal in de brontekst staan.
+NL/EN/ES) staan `OPENAI_API_KEY` en `OPENAI_MODEL` op de Costa-service in
+Railway. Zonder geldige key/model werkt de site gewoon door, alleen blijft
+een niet-gecachede taal in de brontekst staan (zie deploy-logs voor de
+reden).
 
 ## Volgende stappen
 
-- `ANTHROPIC_API_KEY` toevoegen op Railway zodat machinevertaling voor
-  overige talen (Zweeds, Deens, Duits, ...) daadwerkelijk werkt.
+- `OPENAI_MODEL` verifiëren/aanpassen zodra bekend is welke exacte
+  model-id de gewenste versie heeft.
 - Scrapingscript dat nieuwe events vindt (Eventbrite, gemeentekalenders,
   organizer-sites) en upsert via `sourceName`/`externalId`.
 - Volledige categorieënboom uit het conceptdocument.

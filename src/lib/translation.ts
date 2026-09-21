@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import type { Locale } from "@/lib/i18n";
 
@@ -8,8 +8,12 @@ const languageNames: Record<Locale, string> = {
   es: "Spanish",
 };
 
-const anthropic = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+// Model id is configurable via env, since provider-side naming can change
+// without a code deploy; falls back to a sane default if unset.
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
 type TranslateFieldInput = {
@@ -45,6 +49,7 @@ export async function getTranslatedField({
   if (cached) return cached.text;
 
   const text = await translateWithLLM(sourceText, sourceLocale, targetLocale);
+  if (text === sourceText) return text; // translation unavailable; don't cache a non-translation
 
   await prisma.translation.upsert({
     where: {
@@ -78,27 +83,37 @@ export async function getTranslatedFields<T extends Record<string, string>>(
   return Object.fromEntries(entries.map(([field], i) => [field, translated[i]])) as T;
 }
 
+// Never throws: any failure (missing key, bad model id, rate limit, network)
+// falls back to the untranslated source text so a page never breaks on a
+// translation problem -- it just stays in the source language a bit longer.
 async function translateWithLLM(text: string, from: Locale, to: Locale): Promise<string> {
-  if (!anthropic) {
+  if (!openai) {
     console.warn(
-      `[translation] ANTHROPIC_API_KEY not set; returning "${from}" text untranslated for "${to}".`
+      `[translation] OPENAI_API_KEY not set; returning "${from}" text untranslated for "${to}".`
     );
     return text;
   }
 
-  const message = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content:
-          `Translate the following text from ${languageNames[from]} to ${languageNames[to]}. ` +
-          `Reply with only the translation, no quotes, no explanation.\n\n${text}`,
-      },
-    ],
-  });
+  try {
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        {
+          role: "user",
+          content:
+            `Translate the following text from ${languageNames[from]} to ${languageNames[to]}. ` +
+            `Reply with only the translation, no quotes, no explanation.\n\n${text}`,
+        },
+      ],
+    });
 
-  const block = message.content[0];
-  return block?.type === "text" ? block.text.trim() : text;
+    const translated = response.choices[0]?.message?.content?.trim();
+    return translated || text;
+  } catch (err) {
+    console.error(
+      `[translation] OpenAI translation failed (model "${OPENAI_MODEL}", ${from}->${to}):`,
+      err instanceof Error ? err.message : err
+    );
+    return text;
+  }
 }
