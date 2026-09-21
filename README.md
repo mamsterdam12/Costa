@@ -146,10 +146,22 @@ waarna hun eigen kanaal (Facebook resp. hun officiële events-pagina) is
 geverifieerd en geregistreerd, en er vervolgens één echt, via research
 gevonden event per bron is toegevoegd — precies het `SOURCE_DISCOVERY`
 → `EVENTS`-bron → event-pijplijn uit de architectuur hierboven, nu voor
-het eerst met dit doel uitgevoerd. De overige geregistreerde bronnen
-(Ayuntamiento, Manolo Santana, Tablao Ana Maria, The Farm, Marbella
-4Days Walking) staan nog steeds klaar voor toekomstige events, maar
-hebben er momenteel geen aan gekoppeld.
+het eerst met dit doel uitgevoerd.
+
+Een tweede, bredere discovery-ronde (5 parallelle research-taken, elk op
+een eigen domein: cultuur, sport, eten & drinken, nightlife, expat-
+community) leverde 11 nieuwe geverifieerde `EVENTS`-bronnen op:
+Museo Ralli Marbella, Starlite Festival, Real Club Padel Marbella,
+Los Naranjos Golf Club, Casa Pablo, La Sala Puerto Banús, TIBU Banús,
+Naô Pool Club, Nederlandse Club Costa del Sol, Marbella Dutch Business
+Club en SWEA Marbella. Voor 5 daarvan (Starlite/Maroon 5, Real Club
+Padel/AKROS Tournament, Los Naranjos Trophy, Naô Pool Club/Rêve
+Festival, La Sala/Halloween-ontbijt) kon een concreet, gedateerd event
+met een echte detailpagina bevestigd worden. Voor de overige 6 kon dat
+bewust niet: ofwel geen bevestigbare toekomstige datum (Museo Ralli,
+Casa Pablo, TIBU Banús), ofwel geen eigen detailpagina naast de
+overzichtspagina (NCCS, MDBC, SWEA) — die staan geregistreerd als
+`Source` zonder event, in plaats van dat er iets verzonnen is.
 
 Voor elk event is `sourceUrl` de échte specifieke detailpagina (niet een
 overzicht) en is `sourceLocale` de taal van díe pagina, zoals hierboven

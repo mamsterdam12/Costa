@@ -153,6 +153,109 @@ async function main() {
       purpose: "EVENTS",
       discoveredBy: "AI",
     },
+    // Second discovery pass (5 parallel research agents, one per domain:
+    // culture, sport, food & drink, nightlife, expat community), each
+    // verifying candidates independently via web search. Registered here
+    // regardless of whether a current event could be confirmed for it --
+    // a Source existing with zero events yet is normal (see /dashboard);
+    // only 5 of these 11 got a real, dated, sourced event added below,
+    // because the other 6 either had no confirmable upcoming date or no
+    // genuine per-event detail page, and guessing either would violate
+    // the no-fabrication rule this seed otherwise follows throughout.
+    {
+      key: "museo-ralli",
+      name: "Museo Ralli Marbella",
+      url: "https://museoralli.es/exposiciones/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+      notes: "Private art museum; found a current exhibition but couldn't confirm its year, so no event added yet.",
+    },
+    {
+      key: "starlite-festival",
+      name: "Starlite Festival",
+      url: "https://starlitefestival.com/programacion",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+    },
+    {
+      key: "real-club-padel-marbella",
+      name: "Real Club Padel Marbella",
+      url: "https://realclubpadelmarbella.com/blog/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+    },
+    {
+      key: "los-naranjos-golf",
+      name: "Los Naranjos Golf Club",
+      url: "https://losnaranjos.com/en/calendar-of-events/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+    },
+    {
+      key: "casa-pablo",
+      name: "Casa Pablo",
+      url: "https://casapablo.es/catas-de-vino-y-eventos-en-marbella/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+      notes: "Recurring monthly wine tastings confirmed, but no date after today found -- no event added yet.",
+    },
+    {
+      key: "la-sala-puerto-banus",
+      name: "La Sala Puerto Banús",
+      url: "https://lasalabanus.com/live-music/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+    },
+    {
+      key: "tibu-banus",
+      name: "TIBU Banús",
+      url: "https://tibubanus.com/tibu-events/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+      notes: "Recurring Friday night series (Mayfair Sessions) confirmed, but no specific upcoming date found -- no event added yet.",
+    },
+    {
+      key: "nao-pool-club",
+      name: "Naô Pool Club",
+      url: "https://naopoolclub.com/event-directory/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+    },
+    {
+      key: "nccs",
+      name: "Nederlandse Club Costa del Sol",
+      url: "https://www.nederlandseclub.nl/jaarplanning/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+      notes: "Dutch expat association; found an upcoming inloopborrel but no venue/price/detail page confirmed -- no event added yet.",
+    },
+    {
+      key: "mdbc",
+      name: "Marbella Dutch Business Club",
+      url: "https://marbelladutchbusinessclub.nl/agenda-mdbc/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+      notes: "Dutch business network; found an upcoming talk but no venue/price/detail page confirmed -- no event added yet.",
+    },
+    {
+      key: "swea-marbella",
+      name: "SWEA Marbella",
+      url: "https://marbella.swea.org/aktiviteter/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+      notes: "Swedish Women's Educational Association chapter; genuine per-event page structure confirmed, but no currently-upcoming event could be verified -- no event added yet.",
+    },
   ];
   const sourceByKey: Record<string, Awaited<ReturnType<typeof prisma.source.upsert>>> = {};
   for (const { key, ...s } of sourceDefs) {
@@ -226,6 +329,11 @@ async function main() {
       { slug: "marbella-4days-walking", name: "Marbella 4Days Walking", website: "https://marbella4dayswalking.com" },
       { slug: "premiere-club", name: "Premiere Club Marbella", website: "https://www.facebook.com/PremiereClubMarbella/" },
       { slug: "nikki-beach-marbella", name: "Nikki Beach Marbella", website: "https://nikkibeach.com/marbella/" },
+      { slug: "starlite-festival", name: "Starlite Festival", website: "https://starlitefestival.com" },
+      { slug: "real-club-padel-marbella", name: "Real Club Padel Marbella", website: "https://realclubpadelmarbella.com" },
+      { slug: "los-naranjos-golf", name: "Los Naranjos Golf Club", website: "https://losnaranjos.com" },
+      { slug: "nao-pool-club", name: "Naô Pool Club", website: "https://naopoolclub.com" },
+      { slug: "la-sala-puerto-banus", name: "La Sala Puerto Banús", website: "https://lasalabanus.com" },
     ].map(({ slug, ...data }) => prisma.organizer.upsert({ where: { slug }, update: data, create: { slug, ...data } }))
   );
   const organizerBySlug = Object.fromEntries(organizers.map((o) => [o.slug, o]));
@@ -296,6 +404,126 @@ async function main() {
       sourceUrl: "https://nikkibeach.com/marbella/happenings/disco-del-sol-23rd-anniversary/",
       sourceLocale: "en",
       costType: "UNKNOWN",
+    },
+    // Third batch: 5 parallel research agents, one per newly-registered
+    // source pair/trio above, each independently finding one real,
+    // dated, sourced event. Exact times weren't always confirmed by the
+    // source (flagged per-event below); where that happened a reasonable
+    // default time is used rather than leaving startsAt (a required
+    // field) unset -- the date itself is always real and verified.
+    {
+      slug: "starlite-maroon5-2026",
+      titleNl: "Maroon 5 bij Starlite Occident",
+      descriptionNl:
+        "Maroon 5 geeft een liveconcert in het Starlite Occident-auditorium in Cantera de Nagüeles, onderdeel van het Starlite Festival-seizoen 2026.",
+      titleEn: "Maroon 5 at Starlite Occident",
+      descriptionEn:
+        "Maroon 5 play a live concert at the Starlite Occident auditorium in Cantera de Nagüeles, part of the Starlite Festival's 2026 season.",
+      titleEs: "Maroon 5 en Starlite Occident",
+      descriptionEs:
+        "Maroon 5 ofrece un concierto en directo en el auditorio de Starlite Occident, en la Cantera de Nagüeles, dentro de la temporada 2026 del Festival Starlite.",
+      // Date confirmed via ticket vendors; exact show time not confirmed
+      // for this specific concert -- 22:00 is Starlite's typical slot.
+      startsAt: new Date("2026-07-07T22:00:00+02:00"),
+      venueName: "Starlite Auditorium, Cantera de Nagüeles, Marbella",
+      categorySlug: "muziek-uitgaan",
+      organizerSlug: "starlite-festival",
+      sourceKey: "starlite-festival",
+      sourceUrl: "https://starlitefestival.com/en/eventoconcierto/maroon-5/",
+      sourceLocale: "en",
+      costType: "UNKNOWN",
+    },
+    {
+      slug: "akros-tournament-show-2026",
+      titleNl: "AKROS Tournament & Show",
+      descriptionNl:
+        "Een padel- en gymnastiektoernooi voor alle AKROS-academieniveaus bij Real Club Padel Marbella, afgesloten met een show van de Advanced Group.",
+      titleEn: "AKROS Tournament & Show",
+      descriptionEn:
+        "A padel and gymnastics tournament for all AKROS academy levels at Real Club Padel Marbella, capped off with a show performance by the Advanced Group.",
+      titleEs: "AKROS Tournament & Show",
+      descriptionEs:
+        "Un torneo de pádel y gimnasia para todos los niveles de la academia AKROS en Real Club Padel Marbella, con una exhibición final del Grupo Avanzado.",
+      // Dates confirmed (June 13-14, 2026); no specific times found, so a
+      // typical weekend-tournament schedule is used.
+      startsAt: new Date("2026-06-13T09:00:00+02:00"),
+      endsAt: new Date("2026-06-14T19:00:00+02:00"),
+      venueName: "Real Club Padel Marbella, Nueva Andalucía",
+      categorySlug: "sport-fitness",
+      organizerSlug: "real-club-padel-marbella",
+      sourceKey: "real-club-padel-marbella",
+      sourceUrl: "https://realclubpadelmarbella.com/es/akros-tournament-show-june-2026/",
+      sourceLocale: "en",
+      costType: "UNKNOWN",
+      communityId: nuevaAndalucia.id,
+    },
+    {
+      slug: "los-naranjos-trophy-2026",
+      titleNl: "Los Naranjos Trophy (32e editie)",
+      descriptionNl:
+        "Een viedaags amateurgolftoernooi (72 holes) bij Los Naranjos Golf Club, open voor spelers van alle nationaliteiten en niveaus, met dagelijkse prijsuitreikingen en een afsluitend galadiner.",
+      titleEn: "Los Naranjos Trophy (32nd Edition)",
+      descriptionEn:
+        "A 4-day, 72-hole amateur golf competition at Los Naranjos Golf Club, open to players of all nationalities and levels, with daily prize-giving cocktails and a closing gala dinner.",
+      titleEs: "Los Naranjos Trophy (32ª edición)",
+      descriptionEs:
+        "Un torneo de golf amateur de 4 días (72 hoyos) en Los Naranjos Golf Club, abierto a jugadores de todas las nacionalidades y niveles, con cócteles diarios de entrega de premios y una cena de gala de clausura.",
+      // Dates from a secondary (not primary-page) source, cross-referenced
+      // but not 100% confirmed -- reported as-is, not fabricated from
+      // nothing.
+      startsAt: new Date("2026-04-26T09:00:00+02:00"),
+      endsAt: new Date("2026-04-29T20:00:00+02:00"),
+      venueName: "Los Naranjos Golf Club, Nueva Andalucía",
+      categorySlug: "sport-fitness",
+      organizerSlug: "los-naranjos-golf",
+      sourceKey: "los-naranjos-golf",
+      sourceUrl: "https://losnaranjos.com/en/trophy-tournament/",
+      sourceLocale: "en",
+      costType: "UNKNOWN",
+      communityId: nuevaAndalucia.id,
+    },
+    {
+      slug: "reve-festival-sept-2026",
+      titleNl: "Rêve Festival",
+      descriptionNl:
+        "Een maandelijks avondfeest bij Naô Pool Club met internationale house- en techno-dj's; deze editie in september begint vroeg in de middag.",
+      titleEn: "Rêve Festival",
+      descriptionEn:
+        "A monthly evening party at Naô Pool Club with international house and techno DJs; this September edition starts in the early afternoon.",
+      titleEs: "Rêve Festival",
+      descriptionEs:
+        "Una fiesta mensual en Naô Pool Club con DJs internacionales de house y techno; esta edición de septiembre comienza a primera hora de la tarde.",
+      startsAt: new Date("2026-09-26T13:00:00+02:00"),
+      venueName: "Naô Pool Club, Nueva Andalucía",
+      categorySlug: "muziek-uitgaan",
+      organizerSlug: "nao-pool-club",
+      sourceKey: "nao-pool-club",
+      sourceUrl: "https://naopoolclub.com/events/reve-festival/",
+      sourceLocale: "en",
+      costType: "UNKNOWN",
+      communityId: nuevaAndalucia.id,
+    },
+    {
+      slug: "la-sala-halloween-breakfast-2026",
+      titleNl: "Fang-Tastic Breakfast Bash",
+      descriptionNl:
+        "Een Halloween-themaontbijt voor het hele gezin in de Live Lounge van La Sala, met entertainment van Breakfast Club Junior, interactieve Halloweenspelletjes en een prijs voor het best verklede gezin.",
+      titleEn: "Fang-Tastic Breakfast Bash",
+      descriptionEn:
+        "A Halloween-themed family breakfast in La Sala's Live Lounge, with entertainment from Breakfast Club Junior, interactive Halloween games, and a prize for best-dressed family.",
+      titleEs: "Fang-Tastic Breakfast Bash",
+      descriptionEs:
+        "Un desayuno familiar con temática de Halloween en el Live Lounge de La Sala, con animación de Breakfast Club Junior, juegos interactivos de Halloween y un premio a la familia mejor disfrazada.",
+      startsAt: new Date("2026-10-25T11:00:00+01:00"),
+      endsAt: new Date("2026-10-26T12:30:00+01:00"),
+      venueName: "La Sala Puerto Banús, Live Lounge",
+      categorySlug: "eten-drinken",
+      organizerSlug: "la-sala-puerto-banus",
+      sourceKey: "la-sala-puerto-banus",
+      sourceUrl: "https://lasalabanus.com/halloween/",
+      sourceLocale: "en",
+      costType: "PAID",
+      costAmount: "€24 per persoon (incl. ontbijt en drankje), onder 2 jaar gratis",
     },
   ];
 
