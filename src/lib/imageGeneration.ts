@@ -22,9 +22,17 @@ type EventForImage = {
 // Returns the URL to render in an <img src>. Returns null if generation
 // isn't possible right now (no credits, storage not configured, API
 // error) -- a missing photo is never worth blocking ingestion over.
+// Once the API reports the account is out of credits, every further call
+// in this process fails identically -- and each costs a couple of
+// seconds. A six-event scrape spent twelve seconds doing nothing but
+// collecting the same 429, long enough for the browser to give up on the
+// request. Stop asking until the process restarts (or credits are added
+// and it's redeployed).
+let quotaExhausted = false;
+
 export async function getOrGenerateEventImageUrl(event: EventForImage): Promise<string | null> {
   if (event.imageKey) return `/api/images/${event.imageKey}`;
-  if (!openai || !storageAvailable()) return null;
+  if (!openai || !storageAvailable() || quotaExhausted) return null;
 
   const key = `events/${event.slug}.png`;
 
@@ -54,10 +62,15 @@ export async function getOrGenerateEventImageUrl(event: EventForImage): Promise<
     console.log(`[image] Generated and stored image for event ${event.slug}`);
     return `/api/images/${key}`;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error(
       `[image] Generation failed for event ${event.slug} (model "${OPENAI_IMAGE_MODEL}"):`,
-      err instanceof Error ? err.message : err
+      message
     );
+    if (/no credits|insufficient_quota|exceeded your current quota|\b429\b/i.test(message)) {
+      quotaExhausted = true;
+      console.warn("[image] Out of credits -- skipping image generation for the rest of this process.");
+    }
     return null;
   }
 }
