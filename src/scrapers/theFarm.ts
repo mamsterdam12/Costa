@@ -2,7 +2,8 @@ import type { ScrapedEvent, Scraper, ScrapeResult } from "./types";
 import { fetchJson, fetchPage, type FetchedPage } from "./lib/http";
 import { extractJsonLdEvents } from "./lib/jsonld";
 import { absoluteUrl, stripTags } from "./lib/html";
-import { diagnosePage } from "./lib/diagnose";
+import { diagnosePage, excerptAround } from "./lib/diagnose";
+import { parseJetCalendar } from "./lib/jetCalendar";
 
 // The Farm Marbella (thefarm-marbella.com): a WordPress site with a
 // "What's On" page plus an /upcoming-events/ calendar. The site couldn't
@@ -22,7 +23,8 @@ import { diagnosePage } from "./lib/diagnose";
 export const theFarmScraper: Scraper = {
   sourceType: "the-farm",
   name: "The Farm Marbella",
-  description: "What's On / upcoming events at The Farm, Marbella old town (JSON-LD, then WP events API, then HTML).",
+  description:
+    "What's On / upcoming events at The Farm, Marbella old town. Reads their JetEngine month calendar; falls back to JSON-LD and the WP events API if the site ever changes.",
   sourceLocale: "en",
   defaultCategorySlug: "muziek-uitgaan",
 
@@ -66,7 +68,21 @@ export const theFarmScraper: Scraper = {
       notes.push(`tribe REST API: unavailable (${err instanceof Error ? err.message : err})`);
     }
 
-    // 3. HTML heuristic
+    // 3. JetEngine listing calendar (what this site actually uses)
+    for (const [page, res] of fetched) {
+      const cal = parseJetCalendar(res.html, res.url);
+      notes.push(`${page}: jet-calendar ${cal.label}, ${cal.events.length} event(s)`);
+      if (cal.events.length > 0) {
+        return {
+          events: dedupe(cal.events),
+          strategy: "jet-calendar",
+          confidence: cal.datesExplicit ? "high" : "low",
+          notes,
+        };
+      }
+    }
+
+    // 4. HTML heuristic
     for (const [page, res] of fetched) {
       const events = heuristicEvents(res.html, res.url);
       notes.push(`${page}: ${events.length} heuristic event(s)`);
@@ -75,14 +91,18 @@ export const theFarmScraper: Scraper = {
       }
     }
 
-    const diagnostics = [...fetched].flatMap(([page, res]) =>
-      diagnosePage(res.url, res.html, {
+    const diagnostics = [...fetched].flatMap(([page, res]) => [
+      ...diagnosePage(res.url, res.html, {
         requestedUrl: page,
         status: res.status,
         contentType: res.contentType,
         hops: res.hops,
-      })
-    );
+      }),
+      // If the calendar is there but didn't parse, the exact markup is
+      // the only thing that helps -- class names alone weren't enough.
+      ...excerptAround(res.html, "jet-calendar-caption", 700),
+      ...excerptAround(res.html, "jet-calendar-week__day-event", 900),
+    ]);
     return { events: [], strategy: "none", confidence: "low", notes, diagnostics };
   },
 };

@@ -3,18 +3,19 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { defaultLocale, isLocale, ui, type Locale } from "@/lib/i18n";
 import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
+import { formatInMarbella } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
 function formatDate(date: Date, locale: Locale) {
-  return new Intl.DateTimeFormat(locale, {
+  return formatInMarbella(date, locale, {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  });
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {

@@ -5,19 +5,20 @@ import { defaultLocale, isLocale, locales, ui, type Locale } from "@/lib/i18n";
 import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
 import { excerpt } from "@/lib/text";
 import { dateFilterRange, dateFilterLabels, type DateFilter } from "@/lib/eventFilters";
+import { formatInMarbella } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
 const dateFilters: DateFilter[] = ["today", "tomorrow", "weekend", "week", "month"];
 
 function formatDate(date: Date, locale: Locale) {
-  return new Intl.DateTimeFormat(locale, {
+  return formatInMarbella(date, locale, {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  });
 }
 
 export default async function RegionPage({

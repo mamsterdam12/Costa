@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { defaultLocale, isLocale, ui, type Locale } from "@/lib/i18n";
+import { formatStamp } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ function SourceTable({ sources, locale }: { sources: SourceRow[]; locale: Locale
               <td className="px-4 py-2 text-sea-900/70">{s.discoveredBy}</td>
               <td className="px-4 py-2 text-right text-sea-900/70">{s._count.events}</td>
               <td className="px-4 py-2 text-sea-900/70">
-                {s.lastScrapedAt ? s.lastScrapedAt.toLocaleString(locale) : ui.never[locale]}
+                {s.lastScrapedAt ? formatStamp(s.lastScrapedAt, locale) : ui.never[locale]}
               </td>
               <td className="px-4 py-2 text-sea-900/70">
                 {s.active ? ui.active[locale] : ui.inactive[locale]}

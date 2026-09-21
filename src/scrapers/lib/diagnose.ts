@@ -58,6 +58,15 @@ export function diagnosePage(
   return lines;
 }
 
+// Raw markup around the first occurrence of a marker (usually a class
+// name), for when the structure matters and stripped text won't do.
+export function excerptAround(html: string, marker: string, chars = 800): string[] {
+  const at = html.indexOf(marker);
+  if (at < 0) return [`[diagnose] "${marker}": not present`];
+  const from = Math.max(0, at - 200);
+  return [`[diagnose] "${marker}" @${at}: ${JSON.stringify(html.slice(from, from + chars))}`];
+}
+
 function host(src: string): string {
   try {
     return new URL(src, "https://x.invalid").hostname.replace(/^x\.invalid$/, "(same site)");

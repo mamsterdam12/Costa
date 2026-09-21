@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { isTranslationEnabled } from "@/lib/settings";
+import { formatStamp } from "@/lib/datetime";
 import { toggleTranslation, toggleSourceActive, clearSourceReview } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +76,7 @@ export default async function DashboardPage() {
                   <td className="px-4 py-2 text-sea-900/70">{s.purpose}</td>
                   <td className="px-4 py-2 text-sea-900/70">{s._count.events}</td>
                   <td className="px-4 py-2 text-sea-900/70">
-                    {s.lastScrapedAt ? new Date(s.lastScrapedAt).toLocaleString("nl") : "nooit"}
+                    {s.lastScrapedAt ? formatStamp(s.lastScrapedAt, "nl") : "nooit"}
                   </td>
                   <td className="px-4 py-2 text-sea-900/70">
                     {s.needsReview ? (

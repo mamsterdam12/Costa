@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { defaultLocale, isLocale, ui, type Locale } from "@/lib/i18n";
 import { scrapers } from "@/scrapers/registry";
+import { formatStamp } from "@/lib/datetime";
 import { runScraper } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +52,7 @@ export default async function ScriptsPage({
                         </a>
                         <div className="mt-0.5 text-xs text-sea-900/60">
                           {ui.events[locale]}: {s._count.events} · {ui.lastRun[locale]}:{" "}
-                          {s.lastScrapedAt ? s.lastScrapedAt.toLocaleString(locale) : ui.never[locale]}
+                          {s.lastScrapedAt ? formatStamp(s.lastScrapedAt, locale) : ui.never[locale]}
                           {s.lastScrapeStatus && (
                             <>
                               {" "}
