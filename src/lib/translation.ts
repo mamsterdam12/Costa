@@ -112,6 +112,9 @@ async function translateWithLLM(text: string, from: Locale, to: Locale): Promise
     });
 
     const translated = response.choices[0]?.message?.content?.trim();
+    if (translated) {
+      console.log(`[translation] ${from}->${to} via "${OPENAI_MODEL}" ok (${translated.length} chars)`);
+    }
     return translated || text;
   } catch (err) {
     console.error(
