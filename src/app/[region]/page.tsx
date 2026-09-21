@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { defaultLocale, isLocale, locales, type Locale } from "@/lib/i18n";
+import { defaultLocale, isLocale, locales, ui, type Locale } from "@/lib/i18n";
 import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
 import { dateFilterRange, dateFilterLabels, type DateFilter } from "@/lib/eventFilters";
 
@@ -114,7 +114,7 @@ export default async function RegionPage({
           <p className="text-sm font-medium text-sun-600">What&apos;s on</p>
           <h1 className="text-3xl font-bold text-sea-900">{regionName}</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {locales.map((l) => (
             <Link
               key={l}
@@ -136,7 +136,7 @@ export default async function RegionPage({
             !activeFilter ? "bg-sea-600 text-white" : "bg-white text-sea-900 border border-sea-100"
           }`}
         >
-          {locale === "en" ? "All" : locale === "es" ? "Todo" : "Alles"}
+          {ui.all[locale]}
         </Link>
         {dateFilters.map((f) => (
           <Link
@@ -158,7 +158,7 @@ export default async function RegionPage({
             !sp.category ? "bg-sun-500 text-sea-900" : "bg-white text-sea-600 border border-sea-100"
           }`}
         >
-          {locale === "en" ? "All categories" : locale === "es" ? "Todas las categorías" : "Alle categorieën"}
+          {ui.allCategories[locale]}
         </Link>
         {translatedCategories.map((c) => (
           <Link
@@ -176,11 +176,7 @@ export default async function RegionPage({
       <ul className="mt-8 space-y-4">
         {translatedEvents.length === 0 && (
           <li className="rounded-xl border border-dashed border-sea-100 p-6 text-center text-sea-900/60">
-            {locale === "en"
-              ? "No events found for this filter."
-              : locale === "es"
-                ? "No se han encontrado eventos para este filtro."
-                : "Geen events gevonden voor dit filter."}
+            {ui.noEvents[locale]}
           </li>
         )}
         {translatedEvents.map((event) => (

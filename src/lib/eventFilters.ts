@@ -1,11 +1,37 @@
+import type { Locale } from "@/lib/i18n";
+
 export type DateFilter = "today" | "tomorrow" | "weekend" | "week" | "month";
 
-export const dateFilterLabels: Record<DateFilter, Record<string, string>> = {
-  today: { nl: "Vandaag", en: "Today", es: "Hoy" },
-  tomorrow: { nl: "Morgen", en: "Tomorrow", es: "Mañana" },
-  weekend: { nl: "Dit weekend", en: "This weekend", es: "Este fin de semana" },
-  week: { nl: "Deze week", en: "This week", es: "Esta semana" },
-  month: { nl: "Deze maand", en: "This month", es: "Este mes" },
+export const dateFilterLabels: Record<DateFilter, Record<Locale, string>> = {
+  today: { nl: "Vandaag", en: "Today", es: "Hoy", de: "Heute", fr: "Aujourd'hui", sv: "Idag", da: "I dag" },
+  tomorrow: { nl: "Morgen", en: "Tomorrow", es: "Mañana", de: "Morgen", fr: "Demain", sv: "Imorgon", da: "I morgen" },
+  weekend: {
+    nl: "Dit weekend",
+    en: "This weekend",
+    es: "Este fin de semana",
+    de: "Dieses Wochenende",
+    fr: "Ce week-end",
+    sv: "Den här helgen",
+    da: "Denne weekend",
+  },
+  week: {
+    nl: "Deze week",
+    en: "This week",
+    es: "Esta semana",
+    de: "Diese Woche",
+    fr: "Cette semaine",
+    sv: "Den här veckan",
+    da: "Denne uge",
+  },
+  month: {
+    nl: "Deze maand",
+    en: "This month",
+    es: "Este mes",
+    de: "Diesen Monat",
+    fr: "Ce mois-ci",
+    sv: "Den här månaden",
+    da: "Denne måned",
+  },
 };
 
 function startOfDay(d: Date): Date {

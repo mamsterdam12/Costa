@@ -6,6 +6,10 @@ const languageNames: Record<Locale, string> = {
   nl: "Dutch",
   en: "English",
   es: "Spanish",
+  de: "German",
+  fr: "French",
+  sv: "Swedish",
+  da: "Danish",
 };
 
 // Model id is configurable via env, since provider-side naming can change
