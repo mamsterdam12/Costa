@@ -127,6 +127,15 @@ async function main() {
     await seedTranslation("eventCategory", category.id, "name", "es", c.es);
   }
 
+  // Example residential community, distinct from Region -- Manolo Santana
+  // Racquets Club sits in Nueva Andalucía, so its events can optionally be
+  // scoped to that community rather than only to Marbella as a whole.
+  const nuevaAndalucia = await prisma.community.upsert({
+    where: { id: "seed-nueva-andalucia" },
+    update: { name: "Nueva Andalucía", regionId: marbella.id },
+    create: { id: "seed-nueva-andalucia", name: "Nueva Andalucía", regionId: marbella.id },
+  });
+
   const organizers = await Promise.all(
     [
       { slug: "ayuntamiento-marbella", name: "Ayuntamiento de Marbella", website: "https://www.marbella.es" },
@@ -152,6 +161,9 @@ async function main() {
     categorySlug: keyof typeof categoryBySlug;
     organizerSlug?: keyof typeof organizerBySlug;
     sourceUrl: string;
+    costType: "FREE" | "PAID" | "UNKNOWN";
+    costAmount?: string;
+    communityId?: string;
   }> = [
     {
       slug: "tododanza-festival-2026",
@@ -170,6 +182,8 @@ async function main() {
       categorySlug: "cultuur",
       organizerSlug: "ayuntamiento-marbella",
       sourceUrl: "https://www.marbella.es",
+      costType: "PAID",
+      costAmount: "€15",
     },
     {
       slug: "marbella-4-days-walking-2026",
@@ -182,12 +196,14 @@ async function main() {
       titleEs: "Marbella 4 Days Walking",
       descriptionEs:
         "Cuatro días caminando por Marbella con rutas de 10, 20 o 30 km cada día, junto a miles de participantes.",
-      startsAt: new Date("2026-10-14T09:00:00+02:00"),
-      endsAt: new Date("2026-10-17T14:00:00+02:00"),
+      startsAt: new Date("2026-10-01T09:00:00+02:00"),
+      endsAt: new Date("2026-10-04T14:00:00+02:00"),
       venueName: "Startpunt centrum Marbella",
       categorySlug: "sport-fitness",
       organizerSlug: "ayuntamiento-marbella",
       sourceUrl: "https://www.marbella.es",
+      costType: "PAID",
+      costAmount: "€25 per dag, of €85 voor alle 4 dagen (online registratie)",
     },
     {
       slug: "weekmarkt-marbella-maandag",
@@ -206,6 +222,7 @@ async function main() {
       venueName: "Avenida Doctor Maiz Viñals, Marbella",
       categorySlug: "markten-shopping",
       sourceUrl: "https://www.myguidemarbella.com/nl/evenementen",
+      costType: "FREE",
     },
     {
       slug: "sunday-padel-mix-in",
@@ -222,6 +239,8 @@ async function main() {
       categorySlug: "sport-fitness",
       organizerSlug: "manolo-santana-club",
       sourceUrl: "https://manolosantana.es/en/mixin-paddle-tennis-matches/",
+      costType: "UNKNOWN",
+      communityId: nuevaAndalucia.id,
     },
     {
       slug: "flamenco-show-ana-maria",
@@ -241,6 +260,8 @@ async function main() {
       categorySlug: "muziek-uitgaan",
       organizerSlug: "tablao-ana-maria",
       sourceUrl: "https://www.myguidemarbella.com/nightlife/live-music-bars",
+      costType: "PAID",
+      costAmount: "€39-€85, afhankelijk van drankje of diner erbij",
     },
     {
       slug: "the-farm-live-flamenco-dj",
@@ -257,6 +278,7 @@ async function main() {
       categorySlug: "muziek-uitgaan",
       organizerSlug: "the-farm-marbella",
       sourceUrl: "https://thefarm-marbella.com/whats-on/",
+      costType: "FREE",
     },
   ];
 
@@ -269,7 +291,10 @@ async function main() {
       endsAt: e.endsAt,
       recurrenceRule: e.recurrenceRule,
       venueName: e.venueName,
+      costType: e.costType,
+      costAmount: e.costAmount ?? null,
       regionId: marbella.id,
+      communityId: e.communityId ?? null,
       categoryId: categoryBySlug[e.categorySlug].id,
       organizerId: e.organizerSlug ? organizerBySlug[e.organizerSlug].id : null,
       status: "PUBLISHED" as const,

@@ -12,15 +12,29 @@ dat automatisch nieuwe events vindt.
   - `Region` — recursieve boom (Spanje → Costa del Sol → Marbella → ...),
     zodat elke toeristische plaats later zijn eigen pagina krijgt en het
     platform lokaal aanvoelt, ook al draait alles op één database.
+  - `Community` — de residentiële/juridische entiteit (urbanización,
+    Comunidad de Propietarios), los van `Region` (dat puur geografisch is).
+    Ook recursief. Optioneel op `Event`: de meeste events horen wel bij een
+    plaats maar niet bij één specifieke community.
   - `EventCategory` — vertaalbare categorieën.
   - `Organizer` — wie het event organiseert.
   - `Event` — titel/omschrijving zijn platte tekst in de brontaal
-    (`sourceLocale`), gekoppeld aan regio en categorie. Heeft `createdAt`/
-    `updatedAt` en een optionele `createdByUserId` (voor als leden straks
-    zelf events kunnen aanmaken; `null` voor seed/scraper-events).
+    (`sourceLocale`), gekoppeld aan regio, optioneel community en
+    categorie. Heeft `createdAt`/`updatedAt` en een optionele
+    `createdByUserId` (voor als leden straks zelf events kunnen aanmaken;
+    `null` voor seed/scraper-events). `costType` (FREE/PAID/UNKNOWN) plus
+    een vrij tekstveld `costAmount` (prijzen zijn vaak niet één bedrag,
+    bv. "€5 volwassenen, gratis voor kinderen"). `duplicateOfId`
+    verwijst cross-source duplicaten naar het canonieke event zonder ze
+    ooit samen te voegen of te verwijderen (zie hieronder). `sourceId`
+    linkt naar de geregistreerde `Source` (de algemene site, bv. een
+    organizer's eigen website), `sourceUrl` is de specifieke detailpagina
+    van dít event — die wordt op de detailpagina getoond als "Meer info".
   - `User` — minimale stub (id, email, naam) voor een latere fase met
     echte accounts; nu alleen nodig als koppelpunt voor
     `Event.createdByUserId`.
+  - `Setting` — key/value store voor platform-brede schakelaars, nu alleen
+    de handmatige vertaal-circuit-breaker (zie hieronder en `/dashboard`).
   - `Translation` — generieke, herbruikbare vertaalcache voor élk
     vertaalbaar veld van élke entiteit in het platform (nu Event/Region/
     EventCategory, straks Business/Listing/Announcement/forumpost/...),
@@ -30,11 +44,21 @@ dat automatisch nieuwe events vindt.
     AI-ondersteunde discovery-run zoekt nieuwe bronnen en voegt ze hier
     toe (`discoveredBy: AI`, `active: false` tot iemand ze goedkeurt); het
     reguliere scrapen is gewoon deterministische scriptcode (één parser
-    per `sourceType`) die alleen de `active` bronnen afgaat. Events
-    blijven via hun eigen `(sourceName, externalId)` uniek — dat matcht
-    een her-scrape altijd op dezelfde rij (zelfde `id`), dus toekomstige
-    per-event data (bv. "ik ga erheen"/"ik ben er geweest", nog niet
-    gebouwd) wordt nooit geraakt door een routinematige her-scrape.
+    per `sourceType`) die alleen de `active` bronnen afgaat. `purpose`
+    onderscheidt `EVENTS`-bronnen (rechtstreeks scrapen voor events) van
+    `SOURCE_DISCOVERY`-bronnen (aggregators zoals Eventbrite: zelf nooit
+    scrapen voor events, wel gebruiken om nieuwe `EVENTS`-bronnen te
+    vinden). Een falend scrape-script zet `needsReview: true` op zijn
+    `Source`; een AI-agent (of iemand via `/dashboard`) beoordeelt dat
+    later. Events blijven via hun eigen `(sourceName, externalId,
+    startsAt)` uniek — `startsAt` zit in de sleutel zodat een wekelijks
+    terugkerend event (bv. de padel mix-in) niet steeds dezelfde rij
+    overschrijft met een nieuwe datum, maar elke week zijn eigen rij
+    krijgt. Cross-source duplicaten (hetzelfde event op meerdere sites)
+    worden gedetecteerd maar nooit samengevoegd of verwijderd — alleen
+    gemarkeerd via `duplicateOfId`, zodat toekomstige per-event data (bv.
+    "ik ga erheen"/"ik ben er geweest", nog niet gebouwd) nooit verloren
+    gaat.
 - **Meertaligheid** (`src/lib/translation.ts`): elke module slaat content
   op in precies één brontaal. Een vertaling naar een andere taal wordt
   lazy opgehaald: eerst de `Translation`-cache, en bij een cache-miss een
@@ -47,7 +71,13 @@ dat automatisch nieuwe events vindt.
   iemand die taal bezoekt. Zonder `OPENAI_API_KEY`, of als de vertaling om
   wat voor reden dan ook faalt (bv. onjuiste modelnaam), valt het systeem
   terug op de brontekst (geen crash, gewoon nog niet vertaald — zie logs).
-  Taal wisselen via `?lang=nl|en|es` in de URL.
+  Taal wisselen via `?lang=nl|en|es|de|fr|sv|da` in de URL (7 talen, voor
+  huiseigenaren uit o.a. Nederland, VK, Zwitserland, België, Duitsland,
+  Zweden en Denemarken). Een handmatige circuit breaker (`Setting`,
+  `/dashboard`) kan vertalen helemaal uitzetten — bewust geen automatisch
+  herstel, om te voorkomen dat het systeem blijft proberen tegen de OpenAI
+  API terwijl er geen credits zijn; na het aanvullen van credits zet je 'm
+  zelf weer aan.
 - **Klaar voor automatisering**: `Event` heeft `sourceName`, `sourceUrl`,
   `externalId` en `lastSeenAt`, met een unique constraint op
   `(sourceName, externalId)`. Een toekomstig scrapingscript kan hiermee
@@ -75,12 +105,30 @@ dat automatisch nieuwe events vindt.
   credits of bucket-configuratie toont de kaart gewoon geen foto (geen
   crash).
 
+- **Dashboard** (`/dashboard`, nog zonder authenticatie — alleen zo privé
+  als de URL, moet afgeschermd worden voordat 'ie ergens publiek gelinkt
+  wordt): lijst van alle scrape-bronnen (regio, type, doel, aantal events,
+  laatst gescraped, status, actief-schakelaar, "nader te bekijken"-vlag),
+  plus de aan/uit-schakelaar voor vertalen.
+- **Deployment-footer**: elke pagina toont onderaan het deployment-ID, de
+  laatste git-commit en een tijdstip (`src/lib/deploymentInfo.ts`,
+  `src/components/Footer.tsx`), zodat altijd te zien is welke deploy je
+  bekijkt.
+- **Detailpagina** (`/[region]/[event]`): toont letterlijk elk ingevuld
+  veld van het event — titel groot bovenaan, foto, begin-/einddatum,
+  herhaling, locatie/adres/coördinaten, categorie, kosten, community,
+  organisator, status, brontaal, toegevoegd/laatst gewijzigd — en
+  onderaan de bron-link als "Meer info".
+
 ## Seed-data
 
 `prisma/seed.ts` bevat echte, via research gevonden events in Marbella:
 TodoDanza Festival, Marbella 4 Days Walking, de wekelijkse maandagmarkt,
 de Sunday Padel Mix-In bij Manolo Santana Club, en flamenco/live-muziek
-avonden — elk met NL/EN/ES-vertalingen.
+avonden — elk met NL/EN/ES-vertalingen en, waar te achterhalen,
+kosteninformatie uit dezelfde research (bv. TodoDanza €15, Marbella 4
+Days Walking €25/dag). De padel mix-in is gekoppeld aan een voorbeeld-
+`Community` (Nueva Andalucía) om dat veld te demonstreren.
 
 ## Ontwikkelen
 

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
+import { isTranslationEnabled } from "@/lib/settings";
 import type { Locale } from "@/lib/i18n";
 
 const languageNames: Record<Locale, string> = {
@@ -55,6 +56,10 @@ export async function getTranslatedField({
     },
   });
   if (cached) return cached.text;
+
+  if (!(await isTranslationEnabled())) {
+    return sourceText; // circuit breaker off (see /dashboard) -- skip the API call entirely
+  }
 
   const text = await translateWithLLM(sourceText, sourceLocale, targetLocale);
   if (text === sourceText) return text; // translation unavailable; don't cache a non-translation

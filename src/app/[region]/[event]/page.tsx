@@ -39,7 +39,7 @@ export default async function EventPage({
 
   const event = await prisma.event.findUnique({
     where: { slug: eventSlug },
-    include: { category: true, organizer: true, region: true },
+    include: { category: true, organizer: true, region: true, community: true, source: true },
   });
 
   if (!event || event.region.slug !== regionSlug) notFound();
@@ -67,6 +67,22 @@ export default async function EventPage({
     }),
   ]);
 
+  const costLabel =
+    event.costType === "FREE"
+      ? ui.costFree[locale]
+      : event.costType === "PAID"
+        ? event.costAmount || ui.cost[locale]
+        : ui.costUnknown[locale];
+
+  let sourceLanguageLabel: string | null = null;
+  try {
+    sourceLanguageLabel = new Intl.DisplayNames([locale], { type: "language" }).of(
+      event.sourceLocale
+    ) ?? null;
+  } catch {
+    sourceLanguageLabel = event.sourceLocale;
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
       <Link
@@ -92,8 +108,34 @@ export default async function EventPage({
         {event.endsAt && (
           <DetailRow label={ui.endDate[locale]} value={formatDate(event.endsAt, locale)} />
         )}
+        {event.recurrenceRule && (
+          <DetailRow label={ui.recurrence[locale]} value={event.recurrenceRule} />
+        )}
         {event.venueName && <DetailRow label={ui.location[locale]} value={event.venueName} />}
+        {event.address && <DetailRow label={ui.address[locale]} value={event.address} />}
+        {event.latitude != null && event.longitude != null && (
+          <DetailRow
+            label={ui.coordinates[locale]}
+            value={`${event.latitude}, ${event.longitude}`}
+          />
+        )}
         <DetailRow label={ui.category[locale]} value={categoryName} />
+        <DetailRow label={ui.cost[locale]} value={costLabel} />
+        {event.community && (
+          <DetailRow label={ui.community[locale]} value={event.community.name} />
+        )}
+        {event.organizer && (
+          <DetailRow
+            label={ui.organizer[locale]}
+            value={event.organizer.website ? `${event.organizer.name} (${event.organizer.website})` : event.organizer.name}
+          />
+        )}
+        <DetailRow label={ui.status[locale]} value={event.status} />
+        {sourceLanguageLabel && (
+          <DetailRow label={ui.sourceLanguage[locale]} value={sourceLanguageLabel} />
+        )}
+        <DetailRow label={ui.addedOn[locale]} value={formatDate(event.createdAt, locale)} />
+        <DetailRow label={ui.lastUpdated[locale]} value={formatDate(event.updatedAt, locale)} />
       </dl>
 
       <div className="mt-6 rounded-xl border border-sea-100 bg-white p-6 text-sea-900/90">
@@ -102,7 +144,7 @@ export default async function EventPage({
 
       {event.sourceUrl && (
         <p className="mt-4 text-xs text-sea-900/40">
-          {ui.source[locale]}: <a href={event.sourceUrl} className="underline">{event.sourceUrl}</a>
+          {ui.moreInfo[locale]}: <a href={event.sourceUrl} className="underline">{event.sourceUrl}</a>
         </p>
       )}
     </div>

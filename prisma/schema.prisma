@@ -23,9 +23,10 @@ model Region {
   parent   Region?  @relation("RegionHierarchy", fields: [parentId], references: [id])
   children Region[] @relation("RegionHierarchy")
 
-  events    Event[]
-  sources   Source[]
-  createdAt DateTime @default(now())
+  events      Event[]
+  sources     Source[]
+  communities Community[]
+  createdAt   DateTime    @default(now())
 }
 
 // Flat-with-optional-parent category tree.
@@ -55,6 +56,38 @@ model User {
   createdEvents Event[] @relation("EventCreatedBy")
 }
 
+// The residential/legal entity (urbanización, Comunidad de Propietarios)
+// from the original concept doc -- distinct from Region, which is purely
+// geographic. Recursive for the same reason Region is: one urbanización
+// can be several communities, sub-communities, phases, etc. Optional on
+// Event: most events belong to a place (Region) without being tied to one
+// specific residential community.
+model Community {
+  id      String  @id @default(cuid())
+  name    String
+  claimed Boolean @default(false) // false = still "UNCLAIMED" per the concept doc
+
+  region   Region @relation(fields: [regionId], references: [id])
+  regionId String
+
+  parentId String?
+  parent   Community?  @relation("CommunityHierarchy", fields: [parentId], references: [id])
+  children Community[] @relation("CommunityHierarchy")
+
+  events    Event[]
+  createdAt DateTime @default(now())
+}
+
+// Simple key/value store for platform-wide toggles -- currently just the
+// manual translation circuit breaker (src/lib/translation.ts), switched
+// from the /dashboard page. Deliberately manual, not auto-recovering: we
+// don't want it silently hammering the OpenAI API on a retry schedule
+// while credits are out.
+model Setting {
+  key   String @id
+  value String
+}
+
 // A business or person that runs events. A Business elsewhere in the
 // platform can double as an Organizer (see concept doc §13); kept standalone
 // here since the wider Business model doesn't exist yet. Not translated:
@@ -76,9 +109,21 @@ enum EventStatus {
   ARCHIVED
 }
 
+enum CostType {
+  FREE
+  PAID
+  UNKNOWN
+}
+
 enum SourceDiscoveryMethod {
   AI // found by a periodic AI-assisted discovery run
   MANUAL // added by hand (e.g. this seed)
+}
+
+enum SourcePurpose {
+  EVENTS // scraped directly for events, by a regular per-source script
+  SOURCE_DISCOVERY // an aggregator (e.g. Eventbrite's own site) the AI discovery
+  // run searches for new EVENTS sources; never scraped for events itself
 }
 
 // Registry of places to scrape events from -- "the source database" a
@@ -105,12 +150,18 @@ model Source {
   region   Region? @relation(fields: [regionId], references: [id])
   regionId String?
 
+  purpose      SourcePurpose         @default(EVENTS)
   active       Boolean               @default(true)
   discoveredBy SourceDiscoveryMethod @default(MANUAL)
   notes        String? // e.g. the AI discovery run's reasoning for suggesting this source
 
+  // Fase 1 error handling: a failing scraper script marks its Source here.
+  // An AI agent (or a person, via /dashboard) reviews flagged sources and
+  // can deactivate them or clear the flag -- it does not edit scraper code
+  // (that's a later, separate phase).
   lastScrapedAt    DateTime?
   lastScrapeStatus String? // e.g. "success", "failed: 404"
+  needsReview      Boolean   @default(false)
 
   events Event[]
 
@@ -139,6 +190,12 @@ model Event {
   latitude  Float?
   longitude Float?
 
+  // Free text on purpose (not a strict decimal): real-world pricing is
+  // often tiered ("€5 adults, free for children") and doesn't fit a
+  // single number. costType is what's filterable ("show only free events").
+  costType   CostType @default(UNKNOWN)
+  costAmount String?
+
   // Object key in the "costa-media" bucket (e.g. "events/<slug>.png"),
   // generated lazily and cached the same way translations are -- see
   // src/lib/imageGeneration.ts. Served through /api/images/[...key]
@@ -148,6 +205,11 @@ model Event {
   region   Region @relation(fields: [regionId], references: [id])
   regionId String
 
+  // Optional: the specific residential community this event belongs to,
+  // distinct from Region (geographic). Most events won't have one.
+  community   Community? @relation(fields: [communityId], references: [id])
+  communityId String?
+
   category   EventCategory @relation(fields: [categoryId], references: [id])
   categoryId String
 
@@ -155,6 +217,15 @@ model Event {
   organizerId String?
 
   status EventStatus @default(PUBLISHED)
+
+  // Cross-source duplicate detection marks here, never deletes or merges:
+  // both rows keep existing (and keep their own id), so any per-event data
+  // already attached to the duplicate (e.g. future "I'm going" marks)
+  // stays valid. Public pages filter out events where this is set, and
+  // attribute their engagement to the canonical event instead.
+  duplicateOf   Event?  @relation("EventDuplicate", fields: [duplicateOfId], references: [id])
+  duplicateOfId String?
+  duplicates    Event[] @relation("EventDuplicate")
 
   // Null for events from the seed script or a future scraper; set when a
   // member submits their own event.
@@ -179,9 +250,13 @@ model Event {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([sourceName, externalId])
+  // startsAt is part of the key so a recurring event (same source, same
+  // externalId every week) can't accidentally overwrite last week's row
+  // with this week's date -- each occurrence gets matched as its own row.
+  @@unique([sourceName, externalId, startsAt])
   @@index([regionId, startsAt])
   @@index([categoryId])
+  @@index([communityId])
 }
 
 enum TranslationSource {
