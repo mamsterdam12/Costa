@@ -17,8 +17,9 @@ export default function SiteNav() {
   const qs = lang ? `?lang=${lang}` : "";
 
   const items = [
-    { href: `/marbella${qs}`, label: ui.events[locale], active: pathname !== "/bronnen" },
+    { href: `/marbella${qs}`, label: ui.events[locale], active: !["/bronnen", "/scripts"].includes(pathname) },
     { href: `/bronnen${qs}`, label: ui.sources[locale], active: pathname === "/bronnen" },
+    { href: `/scripts${qs}`, label: ui.scripts[locale], active: pathname === "/scripts" },
   ];
 
   return (

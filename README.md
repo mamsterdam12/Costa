@@ -128,6 +128,22 @@ dat automatisch nieuwe events vindt.
   laatste git-commit en een tijdstip (`src/lib/deploymentInfo.ts`,
   `src/components/Footer.tsx`), zodat altijd te zien is welke deploy je
   bekijkt.
+- **Scrape-scripts** (`src/scrapers/`): één parser per `Source.sourceType`,
+  geregistreerd in `registry.ts`. `run.ts` is de gedeelde orkestratie:
+  haalt de bron op, laat de parser draaien, upsert events op
+  `(sourceName, externalId, startsAt)` (elke herhaling van een event houdt
+  zijn eigen rij en id), kent een categorie toe via trefwoordregels (met
+  een default per parser), markeert cross-source duplicaten via
+  `duplicateOfId` (nooit samenvoegen/verwijderen), genereert de foto op
+  het moment van opslaan, en zet `lastScrapedAt`/`lastScrapeStatus`/
+  `needsReview` op de bron. Resultaten met lage betrouwbaarheid komen
+  binnen als `DRAFT` en vlaggen de bron; een parser die niets vindt of
+  faalt zet `needsReview: true` — gokken doet 'ie niet. Eerste parser:
+  `theFarm.ts` (`sourceType: "the-farm"`), getrapt: schema.org
+  JSON-LD → The Events Calendar REST-API → voorzichtige HTML-heuristiek.
+  Uitvoeren via de `/scripts`-pagina (knop per bron) of `npm run scrape
+  [sourceType]` voor een toekomstige cron. Zonder authenticatie, net als
+  `/dashboard`.
 - **Detailpagina** (`/[region]/[event]`): toont letterlijk elk ingevuld
   veld van het event — titel groot bovenaan, foto, begin-/einddatum,
   herhaling, locatie/adres/coördinaten, categorie, kosten, community,

@@ -114,7 +114,8 @@ async function main() {
       key: "the-farm",
       name: "The Farm Marbella",
       url: "https://thefarm-marbella.com/whats-on/",
-      sourceType: "html-listing",
+      // Has a dedicated parser: src/scrapers/theFarm.ts (see registry.ts).
+      sourceType: "the-farm",
       purpose: "EVENTS",
     },
     {
