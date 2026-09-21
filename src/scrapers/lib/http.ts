@@ -12,7 +12,24 @@ export type FetchedPage = {
   contentType: string;
   /** How many meta-refresh hops were followed. */
   hops: number;
+  /** Set when the response is an anti-bot challenge rather than content. */
+  challenge?: string;
 };
+
+// A site putting a CAPTCHA in front of us is telling us not to automate
+// it. We identify the challenge so the failure is reported honestly, and
+// deliberately stop there rather than trying to get past it.
+export function detectChallenge(html: string, url: string): string | null {
+  if (/sgcaptcha/i.test(html) || /sgcaptcha/i.test(url)) {
+    return "SiteGround bot protection (sgcaptcha)";
+  }
+  if (/cdn-cgi\/challenge|challenge-platform|__cf_chl/i.test(html)) return "Cloudflare challenge";
+  if (/\b(captcha|challenge)\b/i.test(url)) return "bot challenge page";
+  if (html.length < 2048 && /<meta[^>]+refresh/i.test(html) && /captcha|challenge|verify/i.test(html)) {
+    return "bot challenge redirect";
+  }
+  return null;
+}
 
 async function fetchOnce(url: string, timeoutMs: number) {
   const controller = new AbortController();
@@ -45,13 +62,24 @@ async function fetchOnce(url: string, timeoutMs: number) {
 export async function fetchPage(url: string, timeoutMs = 15000): Promise<FetchedPage> {
   let res = await fetchOnce(url, timeoutMs);
   let hops = 0;
-  while (hops < 3) {
+  let challenge = detectChallenge(res.html, res.url);
+  while (!challenge && hops < 3) {
     const next = metaRefreshTarget(res.html, res.url);
     if (!next || next === res.url) break;
+    challenge = detectChallenge("", next);
+    if (challenge) break; // don't walk into a CAPTCHA
     res = await fetchOnce(next, timeoutMs);
     hops++;
+    challenge = detectChallenge(res.html, res.url);
   }
-  return { url: res.url, html: res.html, status: res.status, contentType: res.contentType, hops };
+  return {
+    url: res.url,
+    html: res.html,
+    status: res.status,
+    contentType: res.contentType,
+    hops,
+    challenge: challenge ?? undefined,
+  };
 }
 
 export function metaRefreshTarget(html: string, base: string): string | null {
@@ -60,7 +88,12 @@ export function metaRefreshTarget(html: string, base: string): string | null {
     // Quote-aware: content="3; URL='https://...'" nests the other quote.
     const m = /content\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
     const content = m?.[1] ?? m?.[2] ?? m?.[3];
-    const target = content && /url\s*=\s*["']?([^"';\s]+)/i.exec(content)?.[1]?.trim();
+    if (!content) continue;
+    // Browsers accept both "0; url=/x" and the shorthand "0;/x" -- the
+    // latter is what SiteGround's bot challenge emits.
+    const target = (
+      /url\s*=\s*["']?([^"';\s]+)/i.exec(content)?.[1] ?? /^\s*[\d.]+\s*;\s*(\S+)/.exec(content)?.[1]
+    )?.trim();
     if (!target) continue;
     try {
       return new URL(target, base).toString();

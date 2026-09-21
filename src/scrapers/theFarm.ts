@@ -31,7 +31,10 @@ export const theFarmScraper: Scraper = {
   async run(source) {
     const notes: string[] = [];
     const origin = new URL(source.url).origin;
-    const pages = [source.url, `${origin}/upcoming-events/`];
+    // /upcoming-events/ redirects to /whats-on/ and serves byte-identical
+    // HTML, so fetching both just doubled our request rate against a host
+    // that rate-limits -- one page is the whole calendar.
+    const pages = [source.url];
 
     // 1. JSON-LD
     const jsonLd: ScrapedEvent[] = [];
@@ -40,6 +43,10 @@ export const theFarmScraper: Scraper = {
       try {
         const res = await fetchPage(page);
         fetched.set(page, res);
+        if (res.challenge) {
+          notes.push(`${page}: blocked -- ${res.challenge}`);
+          continue;
+        }
         // Resolve against the final URL: a redirect may have moved us.
         const found = extractJsonLdEvents(res.html, res.url);
         notes.push(
@@ -89,6 +96,25 @@ export const theFarmScraper: Scraper = {
       if (events.length > 0) {
         return { events, strategy: "html-heuristic", confidence: "low", notes };
       }
+    }
+
+    const blocked = [...fetched.values()].find((r) => r.challenge)?.challenge;
+    if (blocked && [...fetched.values()].every((r) => r.challenge)) {
+      return {
+        events: [],
+        strategy: "blocked",
+        confidence: "low",
+        notes,
+        blockedReason: blocked,
+        diagnostics: [...fetched].flatMap(([page, res]) =>
+          diagnosePage(res.url, res.html, {
+            requestedUrl: page,
+            status: res.status,
+            contentType: res.contentType,
+            hops: res.hops,
+          })
+        ),
+      };
     }
 
     const diagnostics = [...fetched].flatMap(([page, res]) => [

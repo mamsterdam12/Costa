@@ -26,6 +26,9 @@ export type ScrapeResult = {
   // Structural description of the fetched pages, filled in when nothing
   // was found so the failure leaves clues in the logs (see lib/diagnose.ts).
   diagnostics?: string[];
+  // Set when the source refused us (bot protection, rate limit) rather
+  // than simply having no events -- a very different thing to report.
+  blockedReason?: string;
 };
 
 export type Scraper = {

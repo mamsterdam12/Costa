@@ -89,6 +89,11 @@ export async function runScraperForSource(sourceId: string): Promise<RunSummary>
 
   if (result.events.length === 0) {
     for (const line of result.diagnostics ?? []) console.log(line);
+    if (result.blockedReason) {
+      // Not a parser problem: the source turned us away. Usually rate
+      // limiting, so a later run at a normal interval often succeeds.
+      return fail(`blocked: ${result.blockedReason} -- try again later, don't hammer`);
+    }
     return fail(`failed: no events found (${result.notes.join("; ")})`);
   }
 
