@@ -21,38 +21,44 @@ async function seedTranslation(
 }
 
 async function main() {
+  // Clear any cached machine translations before reseeding the source
+  // content below -- if a bad/stale source value was ever machine-
+  // translated and cached, fixing the source alone wouldn't fix what's
+  // already cached. HUMAN entries (curated EN/ES copy) are left alone.
+  await prisma.translation.deleteMany({ where: { source: "MACHINE" } });
+
   const spain = await prisma.region.upsert({
     where: { slug: "spanje" },
-    update: {},
+    update: { name: "Spanje", sourceLocale: "nl", country: "ES" },
     create: { slug: "spanje", name: "Spanje", sourceLocale: "nl", country: "ES" },
   });
   await seedTranslation("region", spain.id, "name", "en", "Spain");
   await seedTranslation("region", spain.id, "name", "es", "España");
 
+  const costaDelSolData = {
+    name: "Costa del Sol",
+    sourceLocale: "nl",
+    country: "ES",
+    parentId: spain.id,
+  };
   const costaDelSol = await prisma.region.upsert({
     where: { slug: "costa-del-sol" },
-    update: {},
-    create: {
-      slug: "costa-del-sol",
-      name: "Costa del Sol",
-      sourceLocale: "nl",
-      country: "ES",
-      parentId: spain.id,
-    },
+    update: costaDelSolData,
+    create: { slug: "costa-del-sol", ...costaDelSolData },
   });
 
+  const marbellaData = {
+    name: "Marbella",
+    sourceLocale: "nl",
+    country: "ES",
+    parentId: costaDelSol.id,
+    latitude: 36.5108,
+    longitude: -4.8856,
+  };
   const marbella = await prisma.region.upsert({
     where: { slug: "marbella" },
-    update: {},
-    create: {
-      slug: "marbella",
-      name: "Marbella",
-      sourceLocale: "nl",
-      country: "ES",
-      parentId: costaDelSol.id,
-      latitude: 36.5108,
-      longitude: -4.8856,
-    },
+    update: marbellaData,
+    create: { slug: "marbella", ...marbellaData },
   });
 
   const categoryDefs = [
@@ -92,7 +98,7 @@ async function main() {
   for (const c of categoryDefs) {
     const category = await prisma.eventCategory.upsert({
       where: { slug: c.slug },
-      update: {},
+      update: { name: c.name, sourceLocale: "nl" },
       create: { slug: c.slug, name: c.name, sourceLocale: "nl" },
     });
     categoryBySlug[c.slug] = category;
@@ -106,7 +112,7 @@ async function main() {
       { slug: "manolo-santana-club", name: "Manolo Santana Racquets Club", website: "https://manolosantana.es" },
       { slug: "tablao-ana-maria", name: "Tablao Flamenco Ana Maria" },
       { slug: "the-farm-marbella", name: "The Farm Marbella", website: "https://thefarm-marbella.com" },
-    ].map((o) => prisma.organizer.upsert({ where: { slug: o.slug }, update: {}, create: o }))
+    ].map(({ slug, ...data }) => prisma.organizer.upsert({ where: { slug }, update: data, create: { slug, ...data } }))
   );
   const organizerBySlug = Object.fromEntries(organizers.map((o) => [o.slug, o]));
 
@@ -234,27 +240,27 @@ async function main() {
   ];
 
   for (const e of events) {
+    const eventData = {
+      title: e.title,
+      description: e.description,
+      sourceLocale: "nl",
+      startsAt: e.startsAt,
+      endsAt: e.endsAt,
+      recurrenceRule: e.recurrenceRule,
+      venueName: e.venueName,
+      regionId: marbella.id,
+      categoryId: categoryBySlug[e.categorySlug].id,
+      organizerId: e.organizerSlug ? organizerBySlug[e.organizerSlug].id : null,
+      status: "PUBLISHED" as const,
+      sourceName: "manual-research",
+      sourceUrl: e.sourceUrl,
+      externalId: e.slug,
+      lastSeenAt: new Date(),
+    };
     const event = await prisma.event.upsert({
       where: { slug: e.slug },
-      update: {},
-      create: {
-        slug: e.slug,
-        title: e.title,
-        description: e.description,
-        sourceLocale: "nl",
-        startsAt: e.startsAt,
-        endsAt: e.endsAt,
-        recurrenceRule: e.recurrenceRule,
-        venueName: e.venueName,
-        regionId: marbella.id,
-        categoryId: categoryBySlug[e.categorySlug].id,
-        organizerId: e.organizerSlug ? organizerBySlug[e.organizerSlug].id : null,
-        status: "PUBLISHED",
-        sourceName: "manual-research",
-        sourceUrl: e.sourceUrl,
-        externalId: e.slug,
-        lastSeenAt: new Date(),
-      },
+      update: eventData,
+      create: { slug: e.slug, ...eventData },
     });
     await seedTranslation("event", event.id, "title", "en", e.titleEn);
     await seedTranslation("event", event.id, "description", "en", e.descriptionEn);
