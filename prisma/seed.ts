@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { getOrGenerateEventImageUrl } from "../src/lib/imageGeneration";
 
 const prisma = new PrismaClient();
 
@@ -266,6 +267,20 @@ async function main() {
     await seedTranslation("event", event.id, "description", "en", e.descriptionEn);
     await seedTranslation("event", event.id, "title", "es", e.titleEs);
     await seedTranslation("event", event.id, "description", "es", e.descriptionEs);
+
+    // Ingestion-time image generation: a no-op if event.imageKey is
+    // already set (from an earlier seed run), so this stays cheap on
+    // every redeploy after the first. A future scraping script does the
+    // same thing right after it creates/upserts an event.
+    await getOrGenerateEventImageUrl({
+      id: event.id,
+      slug: event.slug,
+      imageKey: event.imageKey,
+      title: event.title,
+      description: event.description,
+      venueName: event.venueName,
+      categoryName: categoryBySlug[e.categorySlug].name,
+    });
   }
 
   console.log(`Seeded ${events.length} events for ${marbella.slug}, with EN/ES translations cached.`);

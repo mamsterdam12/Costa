@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import { prisma } from "@/lib/prisma";
-import { storageAvailable, uploadImage } from "@/lib/storage";
+import { prisma } from "./prisma";
+import { storageAvailable, uploadImage } from "./storage";
 
 const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 
@@ -16,11 +16,12 @@ type EventForImage = {
   categoryName: string;
 };
 
-// Returns the URL to render in an <img src>, generating and caching the
-// image on first request. Returns null (render no image) if generation
-// isn't possible right now (no key, no credits, storage not configured,
-// API error) -- this is a nice-to-have, never something to block a page
-// render on.
+// Called at ingestion time (the seed script today; a future scraping
+// script tomorrow) rather than on page render, so a page load never waits
+// on image generation and a given event is only ever generated once.
+// Returns the URL to render in an <img src>. Returns null if generation
+// isn't possible right now (no credits, storage not configured, API
+// error) -- a missing photo is never worth blocking ingestion over.
 export async function getOrGenerateEventImageUrl(event: EventForImage): Promise<string | null> {
   if (event.imageKey) return `/api/images/${event.imageKey}`;
   if (!openai || !storageAvailable()) return null;

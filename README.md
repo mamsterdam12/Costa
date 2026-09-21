@@ -45,12 +45,17 @@ dat automatisch nieuwe events vindt.
   padel-mix-in. Dit kan later uitgebreid worden naar volledige
   Organizer/EventSeries/EventInstance-objecten zodra losse instances
   nodig zijn.
-- **Event-afbeeldingen** (`src/lib/imageGeneration.ts`): lazy gegenereerd
-  via OpenAI's Images API (`OPENAI_IMAGE_MODEL`, default `gpt-image-1`) op
-  basis van titel/omschrijving/locatie/categorie, en daarna permanent
-  opgeslagen in de "costa-media" Railway-bucket (`Event.imageKey`) zodat
-  hetzelfde event nooit twee keer gegenereerd wordt. Railway-buckets zijn
-  privé (geen publieke URL), dus afbeeldingen worden geserveerd via
+- **Event-afbeeldingen** (`src/lib/imageGeneration.ts`): gegenereerd op
+  het moment dat een event wordt toegevoegd — nu door `prisma/seed.ts`,
+  straks door het scrapingscript — nooit tijdens het laden van de pagina.
+  Elk event wordt zo maar één keer gegenereerd; herhaalde seed-runs slaan
+  events met een bestaande `imageKey` gewoon over. Gebruikt OpenAI's
+  Images API (`OPENAI_IMAGE_MODEL`, default `gpt-image-1`) op basis van
+  titel/omschrijving/locatie/categorie, met expliciet "no text or logos
+  in the image" in de prompt (belangrijk voor het meertalige gebruik: één
+  foto moet voor elke taal werken). Opgeslagen in de "costa-media"
+  Railway-bucket (`Event.imageKey`). Railway-buckets zijn privé (geen
+  publieke URL), dus afbeeldingen worden geserveerd via
   `/api/images/[...key]`, dat de bucket proxyt. Zonder `OPENAI_API_KEY`/
   credits of bucket-configuratie toont de kaart gewoon geen foto (geen
   crash).

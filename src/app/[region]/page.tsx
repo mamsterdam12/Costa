@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { defaultLocale, isLocale, locales, ui, type Locale } from "@/lib/i18n";
 import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
-import { getOrGenerateEventImageUrl } from "@/lib/imageGeneration";
 import { excerpt } from "@/lib/text";
 import { dateFilterRange, dateFilterLabels, type DateFilter } from "@/lib/eventFilters";
 
@@ -80,21 +79,16 @@ export default async function RegionPage({
   const translatedEvents = await Promise.all(
     events.map(async (event) => {
       const categoryName = categoryNameById.get(event.categoryId) ?? event.category.name;
-      const [{ title, description }, imageUrl] = await Promise.all([
-        getTranslatedFields("event", event.id, event.sourceLocale as Locale, locale, {
-          title: event.title,
-          description: event.description,
-        }),
-        getOrGenerateEventImageUrl({
-          id: event.id,
-          slug: event.slug,
-          imageKey: event.imageKey,
-          title: event.title,
-          description: event.description,
-          venueName: event.venueName,
-          categoryName: event.category.name,
-        }),
-      ]);
+      const { title, description } = await getTranslatedFields(
+        "event",
+        event.id,
+        event.sourceLocale as Locale,
+        locale,
+        { title: event.title, description: event.description }
+      );
+      // Images are generated at ingestion time (see prisma/seed.ts), never
+      // on page render -- this just reads whatever was already stored.
+      const imageUrl = event.imageKey ? `/api/images/${event.imageKey}` : null;
       return { ...event, title, description, categoryName, imageUrl };
     })
   );
