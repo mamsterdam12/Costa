@@ -15,7 +15,12 @@ dat automatisch nieuwe events vindt.
   - `EventCategory` — vertaalbare categorieën.
   - `Organizer` — wie het event organiseert.
   - `Event` — titel/omschrijving zijn platte tekst in de brontaal
-    (`sourceLocale`), gekoppeld aan regio en categorie.
+    (`sourceLocale`), gekoppeld aan regio en categorie. Heeft `createdAt`/
+    `updatedAt` en een optionele `createdByUserId` (voor als leden straks
+    zelf events kunnen aanmaken; `null` voor seed/scraper-events).
+  - `User` — minimale stub (id, email, naam) voor een latere fase met
+    echte accounts; nu alleen nodig als koppelpunt voor
+    `Event.createdByUserId`.
   - `Translation` — generieke, herbruikbare vertaalcache voor élk
     vertaalbaar veld van élke entiteit in het platform (nu Event/Region/
     EventCategory, straks Business/Listing/Announcement/forumpost/...),

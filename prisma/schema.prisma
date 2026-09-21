@@ -41,6 +41,19 @@ model EventCategory {
   events Event[]
 }
 
+// Minimal stub for a later stage: real auth, profiles, roles etc. aren't
+// built yet, but Event.createdByUserId needs something to point at now,
+// since members will eventually be able to submit their own events (not
+// just the seed script / a future scraper).
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+
+  createdEvents Event[] @relation("EventCreatedBy")
+}
+
 // A business or person that runs events. A Business elsewhere in the
 // platform can double as an Organizer (see concept doc §13); kept standalone
 // here since the wider Business model doesn't exist yet. Not translated:
@@ -99,6 +112,11 @@ model Event {
   organizerId String?
 
   status EventStatus @default(PUBLISHED)
+
+  // Null for events from the seed script or a future scraper; set when a
+  // member submits their own event.
+  createdByUser   User?   @relation("EventCreatedBy", fields: [createdByUserId], references: [id])
+  createdByUserId String?
 
   // Discovery/ingestion metadata, so a future script can upsert safely
   // instead of creating duplicates, and so stale finds can be flagged.
