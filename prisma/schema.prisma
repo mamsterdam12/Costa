@@ -24,6 +24,7 @@ model Region {
   children Region[] @relation("RegionHierarchy")
 
   events    Event[]
+  sources   Source[]
   createdAt DateTime @default(now())
 }
 
@@ -75,6 +76,48 @@ enum EventStatus {
   ARCHIVED
 }
 
+enum SourceDiscoveryMethod {
+  AI // found by a periodic AI-assisted discovery run
+  MANUAL // added by hand (e.g. this seed)
+}
+
+// Registry of places to scrape events from -- "the source database" a
+// regular scraper script reads. Two separate mechanisms populate/use this:
+//
+// - Periodic, AI-assisted discovery runs (infrequent, e.g. monthly) look
+//   for event sources this region doesn't have yet and INSERT new rows
+//   here with discoveredBy: AI and active: false, pending review. They
+//   never touch Event rows themselves.
+// - Regular scraping (frequent, e.g. daily/hourly) is plain deterministic
+//   script code, one parser per `sourceType`, that reads every `active`
+//   Source and upserts the events it finds via Event's own
+//   (sourceName, externalId) unique constraint. That upsert always
+//   updates the *same* Event row (same id) for a given source event, so
+//   later per-event data that hangs off that id -- e.g. members marking
+//   "I'm going" / "I was there", not built yet -- is never disturbed by
+//   a routine re-scrape.
+model Source {
+  id         String @id @default(cuid())
+  name       String
+  url        String @unique
+  sourceType String // e.g. "eventbrite", "ics-calendar", "html-listing" -- selects which parser the scraper script uses
+
+  region   Region? @relation(fields: [regionId], references: [id])
+  regionId String?
+
+  active       Boolean               @default(true)
+  discoveredBy SourceDiscoveryMethod @default(MANUAL)
+  notes        String? // e.g. the AI discovery run's reasoning for suggesting this source
+
+  lastScrapedAt    DateTime?
+  lastScrapeStatus String? // e.g. "success", "failed: 404"
+
+  events Event[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // One visible occurrence of an event. `recurrenceRule` is descriptive
 // metadata for now (e.g. "WEEKLY;BYDAY=SU") describing how it repeats;
 // splitting this into full Organizer/EventSeries/EventInstance objects
@@ -120,7 +163,15 @@ model Event {
 
   // Discovery/ingestion metadata, so a future script can upsert safely
   // instead of creating duplicates, and so stale finds can be flagged.
-  sourceName String? // e.g. "manual", "eventbrite", "tevienes"
+  // `source`/`sourceId` links to the Source registry once that source is
+  // registered there; `sourceName`/`sourceUrl` stay as free-text fields
+  // (also used by hand-entered events like this seed's, which aren't
+  // tied to a Source row) and remain what the unique constraint below
+  // matches on, so registering a Source later doesn't require touching
+  // already-ingested events.
+  source     Source? @relation(fields: [sourceId], references: [id])
+  sourceId   String?
+  sourceName String? // e.g. "manual-research", "eventbrite", "tevienes"
   sourceUrl  String?
   externalId String? // id/hash from the source
   lastSeenAt DateTime? // last time a discovery run confirmed this still exists

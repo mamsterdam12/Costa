@@ -62,6 +62,26 @@ async function main() {
     create: { slug: "marbella", ...marbellaData },
   });
 
+  // Source registry: the real sites this seed's events were researched
+  // from, registered as sources a future regular-scraping script can read
+  // and re-visit. discoveredBy: MANUAL/active: true since a person (this
+  // seed) vetted them; a periodic AI discovery run would instead insert
+  // new rows here with discoveredBy: AI, active: false, pending review.
+  const sourceDefs = [
+    { name: "Ayuntamiento de Marbella", url: "https://www.marbella.es", sourceType: "html-listing" },
+    { name: "Manolo Santana Racquets Club", url: "https://manolosantana.es/en/mixin-paddle-tennis-matches/", sourceType: "html-listing" },
+    { name: "My Guide Marbella", url: "https://www.myguidemarbella.com/nl/evenementen", sourceType: "html-listing" },
+    { name: "The Farm Marbella", url: "https://thefarm-marbella.com/whats-on/", sourceType: "html-listing" },
+  ];
+  const sourceByUrl: Record<string, Awaited<ReturnType<typeof prisma.source.upsert>>> = {};
+  for (const s of sourceDefs) {
+    sourceByUrl[s.url] = await prisma.source.upsert({
+      where: { url: s.url },
+      update: { name: s.name, sourceType: s.sourceType, regionId: marbella.id },
+      create: { ...s, regionId: marbella.id, discoveredBy: "MANUAL", active: true },
+    });
+  }
+
   const categoryDefs = [
     {
       slug: "sport-fitness",
@@ -253,6 +273,7 @@ async function main() {
       categoryId: categoryBySlug[e.categorySlug].id,
       organizerId: e.organizerSlug ? organizerBySlug[e.organizerSlug].id : null,
       status: "PUBLISHED" as const,
+      sourceId: sourceByUrl[e.sourceUrl]?.id ?? null,
       sourceName: "manual-research",
       sourceUrl: e.sourceUrl,
       externalId: e.slug,

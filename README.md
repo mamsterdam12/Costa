@@ -25,6 +25,16 @@ dat automatisch nieuwe events vindt.
     vertaalbaar veld van élke entiteit in het platform (nu Event/Region/
     EventCategory, straks Business/Listing/Announcement/forumpost/...),
     sleutel `(entityType, entityId, field, locale)`.
+  - `Source` — registratie van scrape-bronnen ("de source database"), los
+    van de events zelf. Twee mechanismen werken hiermee: een periodieke,
+    AI-ondersteunde discovery-run zoekt nieuwe bronnen en voegt ze hier
+    toe (`discoveredBy: AI`, `active: false` tot iemand ze goedkeurt); het
+    reguliere scrapen is gewoon deterministische scriptcode (één parser
+    per `sourceType`) die alleen de `active` bronnen afgaat. Events
+    blijven via hun eigen `(sourceName, externalId)` uniek — dat matcht
+    een her-scrape altijd op dezelfde rij (zelfde `id`), dus toekomstige
+    per-event data (bv. "ik ga erheen"/"ik ben er geweest", nog niet
+    gebouwd) wordt nooit geraakt door een routinematige her-scrape.
 - **Meertaligheid** (`src/lib/translation.ts`): elke module slaat content
   op in precies één brontaal. Een vertaling naar een andere taal wordt
   lazy opgehaald: eerst de `Translation`-cache, en bij een cache-miss een
