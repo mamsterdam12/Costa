@@ -59,6 +59,20 @@ dat automatisch nieuwe events vindt.
     gemarkeerd via `duplicateOfId`, zodat toekomstige per-event data (bv.
     "ik ga erheen"/"ik ben er geweest", nog niet gebouwd) nooit verloren
     gaat.
+
+    Een `Source.url` is de *overzichtspagina* van een organizer/locatie
+    (wat een scraper regelmatig zou aflopen om events te vinden) — een
+    `Event.sourceUrl` is juist de *specifieke detailpagina* van dat ene
+    event, nooit een overzicht. Een aggregator die zelf geen eigen events
+    organiseert maar wél veel andere organizers/venues verzamelt (bv. My
+    Guide Marbella, net als Eventbrite) hoort als `SOURCE_DISCOVERY`
+    geregistreerd te staan: alleen gebruikt om nieuwe `EVENTS`-bronnen te
+    vínden, nooit als `sourceId` van een Event. `Event.sourceLocale`
+    wordt per event afgeleid van de daadwerkelijke taal van die
+    `sourceUrl` (bv. Spaans voor een pagina op marbella.es, Engels voor
+    de `/en/`-versie van een clubsite) — nooit een vast "nl" ongeacht de
+    bron, anders zou de vertaalcache een verkeerde taal als "brontekst"
+    behandelen.
 - **Meertaligheid** (`src/lib/translation.ts`): elke module slaat content
   op in precies één brontaal. Een vertaling naar een andere taal wordt
   lazy opgehaald: eerst de `Translation`-cache, en bij een cache-miss een
@@ -125,10 +139,18 @@ dat automatisch nieuwe events vindt.
 `prisma/seed.ts` bevat echte, via research gevonden events in Marbella:
 TodoDanza Festival, Marbella 4 Days Walking, de wekelijkse maandagmarkt,
 de Sunday Padel Mix-In bij Manolo Santana Club, en flamenco/live-muziek
-avonden — elk met NL/EN/ES-vertalingen en, waar te achterhalen,
+avonden — elk met tekst in alle 3 nl/en/es, en, waar te achterhalen,
 kosteninformatie uit dezelfde research (bv. TodoDanza €15, Marbella 4
 Days Walking €25/dag). De padel mix-in is gekoppeld aan een voorbeeld-
 `Community` (Nueva Andalucía) om dat veld te demonstreren.
+
+Voor elk event is `sourceUrl` de échte specifieke detailpagina (niet een
+overzicht) en is `sourceLocale` de taal van díe pagina, zoals hierboven
+beschreven — dus bv. Spaans voor TodoDanza (turismo.marbella.es) en
+Engels voor de padel mix-in (manolosantana.es/en/...). De canonieke
+`title`/`description` van elk event staan in die brontaal; de andere
+twee talen komen uit de handmatig gecureerde `Translation`-cache
+(`source: HUMAN`), niet uit een live veld.
 
 ## Ontwikkelen
 

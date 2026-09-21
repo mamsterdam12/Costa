@@ -3,10 +3,11 @@ import { getOrGenerateEventImageUrl } from "../src/lib/imageGeneration";
 
 const prisma = new PrismaClient();
 
-// Pre-seeds the shared Translation cache with curated EN/ES copy (marked
-// HUMAN so the lazy machine-translation path never overwrites it). Any
-// other locale (Swedish, German, Danish, ...) simply isn't cached yet, and
-// gets machine-translated + cached the first time someone requests it.
+// Pre-seeds the shared Translation cache with curated copy (marked HUMAN
+// so the lazy machine-translation path never overwrites it). Any locale
+// that isn't hand-written here (Swedish, German, Danish, ...) simply isn't
+// cached yet, and gets machine-translated + cached the first time someone
+// requests it.
 async function seedTranslation(
   entityType: string,
   entityId: string,
@@ -67,17 +68,65 @@ async function main() {
   // and re-visit. discoveredBy: MANUAL/active: true since a person (this
   // seed) vetted them; a periodic AI discovery run would instead insert
   // new rows here with discoveredBy: AI, active: false, pending review.
+  //
+  // Each `url` here is the organizer's own EVENTS overview page (what a
+  // regular scraper script would crawl) -- distinct from an individual
+  // Event's own `sourceUrl`, which is that one event's specific detail
+  // page. purpose: SOURCE_DISCOVERY marks aggregators (like My Guide
+  // Marbella, a travel-guide directory covering many unrelated venues,
+  // the same role Eventbrite would play) that periodic AI discovery runs
+  // use to *find* new EVENTS sources -- never scraped for events directly,
+  // so no Event ever links to one via sourceKey below.
   const sourceDefs = [
-    { name: "Ayuntamiento de Marbella", url: "https://www.marbella.es", sourceType: "html-listing" },
-    { name: "Manolo Santana Racquets Club", url: "https://manolosantana.es/en/mixin-paddle-tennis-matches/", sourceType: "html-listing" },
-    { name: "My Guide Marbella", url: "https://www.myguidemarbella.com/nl/evenementen", sourceType: "html-listing" },
-    { name: "The Farm Marbella", url: "https://thefarm-marbella.com/whats-on/", sourceType: "html-listing" },
+    {
+      key: "ayuntamiento-marbella",
+      name: "Ayuntamiento de Marbella (Turismo agenda)",
+      url: "https://turismo.marbella.es/agenda.html",
+      sourceType: "html-listing",
+      purpose: "EVENTS" as const,
+    },
+    {
+      key: "manolo-santana",
+      name: "Manolo Santana Racquets Club",
+      url: "https://manolosantana.es/en/mixin-paddle-tennis-matches/",
+      sourceType: "html-listing",
+      purpose: "EVENTS" as const,
+    },
+    {
+      key: "tablao-ana-maria",
+      name: "Tablao Flamenco Ana Maria",
+      url: "https://www.flamencoanamariamarbella.com/",
+      sourceType: "html-listing",
+      purpose: "EVENTS" as const,
+    },
+    {
+      key: "the-farm",
+      name: "The Farm Marbella",
+      url: "https://thefarm-marbella.com/whats-on/",
+      sourceType: "html-listing",
+      purpose: "EVENTS" as const,
+    },
+    {
+      key: "marbella4dayswalking",
+      name: "Marbella 4Days Walking",
+      url: "https://marbella4dayswalking.com/",
+      sourceType: "html-listing",
+      purpose: "EVENTS" as const,
+    },
+    {
+      key: "myguide-marbella",
+      name: "My Guide Marbella",
+      url: "https://www.myguidemarbella.com/",
+      sourceType: "html-listing",
+      purpose: "SOURCE_DISCOVERY" as const,
+      notes: "Travel-guide directory covering many unrelated venues (like Eventbrite) -- a source for finding sources, not for scraping events directly.",
+    },
   ];
-  const sourceByUrl: Record<string, Awaited<ReturnType<typeof prisma.source.upsert>>> = {};
-  for (const s of sourceDefs) {
-    sourceByUrl[s.url] = await prisma.source.upsert({
+  const sourceByKey: Record<string, Awaited<ReturnType<typeof prisma.source.upsert>>> = {};
+  for (const { key, ...s } of sourceDefs) {
+    sourceByKey[key] = await prisma.source.upsert({
       where: { url: s.url },
-      update: { name: s.name, sourceType: s.sourceType, regionId: marbella.id },
+      update: { name: s.name, sourceType: s.sourceType, purpose: s.purpose, regionId: marbella.id },
       create: { ...s, regionId: marbella.id, discoveredBy: "MANUAL", active: true },
     });
   }
@@ -140,16 +189,17 @@ async function main() {
     [
       { slug: "ayuntamiento-marbella", name: "Ayuntamiento de Marbella", website: "https://www.marbella.es" },
       { slug: "manolo-santana-club", name: "Manolo Santana Racquets Club", website: "https://manolosantana.es" },
-      { slug: "tablao-ana-maria", name: "Tablao Flamenco Ana Maria" },
+      { slug: "tablao-ana-maria", name: "Tablao Flamenco Ana Maria", website: "https://www.flamencoanamariamarbella.com" },
       { slug: "the-farm-marbella", name: "The Farm Marbella", website: "https://thefarm-marbella.com" },
+      { slug: "marbella-4days-walking", name: "Marbella 4Days Walking", website: "https://marbella4dayswalking.com" },
     ].map(({ slug, ...data }) => prisma.organizer.upsert({ where: { slug }, update: data, create: { slug, ...data } }))
   );
   const organizerBySlug = Object.fromEntries(organizers.map((o) => [o.slug, o]));
 
   const events: Array<{
     slug: string;
-    title: string;
-    description: string;
+    titleNl: string;
+    descriptionNl: string;
     titleEn: string;
     descriptionEn: string;
     titleEs: string;
@@ -160,15 +210,20 @@ async function main() {
     venueName: string;
     categorySlug: keyof typeof categoryBySlug;
     organizerSlug?: keyof typeof organizerBySlug;
+    // The Source registry row this event's own detail page belongs to
+    // (see sourceDefs above) -- and sourceLocale is the language of that
+    // specific sourceUrl page, derived per event, never a fixed default.
+    sourceKey: keyof typeof sourceByKey;
     sourceUrl: string;
+    sourceLocale: "nl" | "en" | "es";
     costType: "FREE" | "PAID" | "UNKNOWN";
     costAmount?: string;
     communityId?: string;
   }> = [
     {
       slug: "tododanza-festival-2026",
-      title: "TodoDanza Festival",
-      description:
+      titleNl: "TodoDanza Festival",
+      descriptionNl:
         "16e editie van het TodoDanza Festival: hedendaagse dans en flamenco met 13 gezelschappen en meer dan 40 artiesten, verspreid over meerdere locaties in Marbella.",
       titleEn: "TodoDanza Festival",
       descriptionEn:
@@ -181,14 +236,16 @@ async function main() {
       venueName: "Teatro Ciudad de Marbella",
       categorySlug: "cultuur",
       organizerSlug: "ayuntamiento-marbella",
-      sourceUrl: "https://www.marbella.es",
+      sourceKey: "ayuntamiento-marbella",
+      sourceUrl: "https://turismo.marbella.es/agenda/festival-marbella-todo-danza.html",
+      sourceLocale: "es",
       costType: "PAID",
       costAmount: "€15",
     },
     {
       slug: "marbella-4-days-walking-2026",
-      title: "Marbella 4 Days Walking",
-      description:
+      titleNl: "Marbella 4 Days Walking",
+      descriptionNl:
         "Vier dagen wandelen door Marbella met routes van 10, 20 of 30 kilometer per dag, samen met duizenden andere deelnemers.",
       titleEn: "Marbella 4 Days Walking",
       descriptionEn:
@@ -200,15 +257,17 @@ async function main() {
       endsAt: new Date("2026-10-04T14:00:00+02:00"),
       venueName: "Startpunt centrum Marbella",
       categorySlug: "sport-fitness",
-      organizerSlug: "ayuntamiento-marbella",
-      sourceUrl: "https://www.marbella.es",
+      organizerSlug: "marbella-4days-walking",
+      sourceKey: "marbella4dayswalking",
+      sourceUrl: "https://marbella4dayswalking.com/",
+      sourceLocale: "nl",
       costType: "PAID",
       costAmount: "€25 per dag, of €85 voor alle 4 dagen (online registratie)",
     },
     {
       slug: "weekmarkt-marbella-maandag",
-      title: "Wekelijkse markt Marbella",
-      description:
+      titleNl: "Wekelijkse markt Marbella",
+      descriptionNl:
         "Elke maandag houdt Marbella zijn weekmarkt met verse producten, kleding, sieraden en meer.",
       titleEn: "Marbella weekly street market",
       descriptionEn:
@@ -221,13 +280,16 @@ async function main() {
       recurrenceRule: "WEEKLY;BYDAY=MO",
       venueName: "Avenida Doctor Maiz Viñals, Marbella",
       categorySlug: "markten-shopping",
-      sourceUrl: "https://www.myguidemarbella.com/nl/evenementen",
+      sourceKey: "ayuntamiento-marbella",
+      sourceUrl:
+        "https://turismo.marbella.es/vive/compras/mercados-de-abastos-y-mercadillos/mercadillo-marbella.html",
+      sourceLocale: "es",
       costType: "FREE",
     },
     {
       slug: "sunday-padel-mix-in",
-      title: "Sunday Padel Mix-In",
-      description: "Wekelijkse gemengde padel mix-in voor niveau 1-4, inclusief BBQ na afloop.",
+      titleNl: "Sunday Padel Mix-In",
+      descriptionNl: "Wekelijkse gemengde padel mix-in voor niveau 1-4, inclusief BBQ na afloop.",
       titleEn: "Sunday Padel Mix-In",
       descriptionEn: "Weekly mixed-level padel mix-in for levels 1-4, with a BBQ afterwards.",
       titleEs: "Mix-In de pádel del domingo",
@@ -238,14 +300,16 @@ async function main() {
       venueName: "Manolo Santana Racquets Club",
       categorySlug: "sport-fitness",
       organizerSlug: "manolo-santana-club",
+      sourceKey: "manolo-santana",
       sourceUrl: "https://manolosantana.es/en/mixin-paddle-tennis-matches/",
+      sourceLocale: "en",
       costType: "UNKNOWN",
       communityId: nuevaAndalucia.id,
     },
     {
       slug: "flamenco-show-ana-maria",
-      title: "Flamenco Show",
-      description:
+      titleNl: "Flamenco Show",
+      descriptionNl:
         "Anderhalf uur pure flamenco: gitaar, zang en dans in het historische centrum van Marbella.",
       titleEn: "Flamenco Show",
       descriptionEn:
@@ -259,14 +323,16 @@ async function main() {
       venueName: "Tablao Flamenco Ana Maria, Marbella Old Town",
       categorySlug: "muziek-uitgaan",
       organizerSlug: "tablao-ana-maria",
-      sourceUrl: "https://www.myguidemarbella.com/nightlife/live-music-bars",
+      sourceKey: "tablao-ana-maria",
+      sourceUrl: "https://www.flamencoanamariamarbella.com/",
+      sourceLocale: "es",
       costType: "PAID",
       costAmount: "€39-€85, afhankelijk van drankje of diner erbij",
     },
     {
       slug: "the-farm-live-flamenco-dj",
-      title: "Live Flamenco & DJ Night",
-      description: "Live flamenco gevolgd door een DJ-set in het oude centrum van Marbella.",
+      titleNl: "Live Flamenco & DJ Night",
+      descriptionNl: "Live flamenco gevolgd door een DJ-set in het oude centrum van Marbella.",
       titleEn: "Live Flamenco & DJ Night",
       descriptionEn: "Live flamenco followed by a DJ set in Marbella's old town.",
       titleEs: "Noche de flamenco en vivo y DJ",
@@ -277,16 +343,30 @@ async function main() {
       venueName: "The Farm Marbella",
       categorySlug: "muziek-uitgaan",
       organizerSlug: "the-farm-marbella",
+      sourceKey: "the-farm",
       sourceUrl: "https://thefarm-marbella.com/whats-on/",
+      sourceLocale: "en",
       costType: "FREE",
     },
   ];
 
   for (const e of events) {
+    // Each event is hand-written in all three of nl/en/es; the one that
+    // matches sourceLocale becomes the canonical title/description (as a
+    // real scrape would store the text in whatever language the source
+    // page is actually in), and the other two are cached as HUMAN
+    // translations instead of being live fields.
+    const textByLocale: Record<"nl" | "en" | "es", { title: string; description: string }> = {
+      nl: { title: e.titleNl, description: e.descriptionNl },
+      en: { title: e.titleEn, description: e.descriptionEn },
+      es: { title: e.titleEs, description: e.descriptionEs },
+    };
+    const canonical = textByLocale[e.sourceLocale];
+
     const eventData = {
-      title: e.title,
-      description: e.description,
-      sourceLocale: "nl",
+      title: canonical.title,
+      description: canonical.description,
+      sourceLocale: e.sourceLocale,
       startsAt: e.startsAt,
       endsAt: e.endsAt,
       recurrenceRule: e.recurrenceRule,
@@ -298,7 +378,7 @@ async function main() {
       categoryId: categoryBySlug[e.categorySlug].id,
       organizerId: e.organizerSlug ? organizerBySlug[e.organizerSlug].id : null,
       status: "PUBLISHED" as const,
-      sourceId: sourceByUrl[e.sourceUrl]?.id ?? null,
+      sourceId: sourceByKey[e.sourceKey].id,
       sourceName: "manual-research",
       sourceUrl: e.sourceUrl,
       externalId: e.slug,
@@ -309,10 +389,10 @@ async function main() {
       update: eventData,
       create: { slug: e.slug, ...eventData },
     });
-    await seedTranslation("event", event.id, "title", "en", e.titleEn);
-    await seedTranslation("event", event.id, "description", "en", e.descriptionEn);
-    await seedTranslation("event", event.id, "title", "es", e.titleEs);
-    await seedTranslation("event", event.id, "description", "es", e.descriptionEs);
+    for (const locale of (["nl", "en", "es"] as const).filter((l) => l !== e.sourceLocale)) {
+      await seedTranslation("event", event.id, "title", locale, textByLocale[locale].title);
+      await seedTranslation("event", event.id, "description", locale, textByLocale[locale].description);
+    }
 
     // Ingestion-time image generation: a no-op if event.imageKey is
     // already set (from an earlier seed run), so this stays cheap on
@@ -329,7 +409,9 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${events.length} events for ${marbella.slug}, with EN/ES translations cached.`);
+  console.log(
+    `Seeded ${events.length} events for ${marbella.slug}, each canonical in its real source language with the other two locales cached.`
+  );
 }
 
 main()
