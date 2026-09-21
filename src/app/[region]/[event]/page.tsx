@@ -78,6 +78,15 @@ export default async function EventPage({
 
       <h1 className="mt-4 text-4xl font-bold text-sea-900">{title}</h1>
 
+      {event.imageKey && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/api/images/${event.imageKey}`}
+          alt={title}
+          className="mt-6 h-64 w-full rounded-xl object-cover sm:h-80"
+        />
+      )}
+
       <dl className="mt-6 rounded-xl border border-sea-100 bg-white px-5">
         <DetailRow label={ui.startDate[locale]} value={formatDate(event.startsAt, locale)} />
         {event.endsAt && (
