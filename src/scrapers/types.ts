@@ -23,6 +23,9 @@ export type ScrapeResult = {
   // Heuristic strategies are not trusted enough to publish unreviewed.
   confidence: "high" | "low";
   notes: string[];
+  // Structural description of the fetched pages, filled in when nothing
+  // was found so the failure leaves clues in the logs (see lib/diagnose.ts).
+  diagnostics?: string[];
 };
 
 export type Scraper = {

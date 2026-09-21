@@ -2,6 +2,7 @@ import type { ScrapedEvent, Scraper, ScrapeResult } from "./types";
 import { fetchJson, fetchText } from "./lib/http";
 import { extractJsonLdEvents } from "./lib/jsonld";
 import { absoluteUrl, stripTags } from "./lib/html";
+import { diagnosePage } from "./lib/diagnose";
 
 // The Farm Marbella (thefarm-marbella.com): a WordPress site with a
 // "What's On" page plus an /upcoming-events/ calendar. The site couldn't
@@ -32,9 +33,11 @@ export const theFarmScraper: Scraper = {
 
     // 1. JSON-LD
     const jsonLd: ScrapedEvent[] = [];
+    const fetched = new Map<string, string>();
     for (const page of pages) {
       try {
         const html = await fetchText(page);
+        fetched.set(page, html);
         const found = extractJsonLdEvents(html, page);
         notes.push(`${page}: ${found.length} JSON-LD event(s)`);
         jsonLd.push(...found);
@@ -60,20 +63,16 @@ export const theFarmScraper: Scraper = {
     }
 
     // 3. HTML heuristic
-    for (const page of pages) {
-      try {
-        const html = await fetchText(page);
-        const events = heuristicEvents(html, page);
-        notes.push(`${page}: ${events.length} heuristic event(s)`);
-        if (events.length > 0) {
-          return { events, strategy: "html-heuristic", confidence: "low", notes };
-        }
-      } catch {
-        // Already reported in step 1.
+    for (const [page, html] of fetched) {
+      const events = heuristicEvents(html, page);
+      notes.push(`${page}: ${events.length} heuristic event(s)`);
+      if (events.length > 0) {
+        return { events, strategy: "html-heuristic", confidence: "low", notes };
       }
     }
 
-    return { events: [], strategy: "none", confidence: "low", notes };
+    const diagnostics = [...fetched].flatMap(([page, html]) => diagnosePage(page, html));
+    return { events: [], strategy: "none", confidence: "low", notes, diagnostics };
   },
 };
 

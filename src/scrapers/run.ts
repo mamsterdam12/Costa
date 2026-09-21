@@ -88,6 +88,7 @@ export async function runScraperForSource(sourceId: string): Promise<RunSummary>
   summary.strategy = result.strategy;
 
   if (result.events.length === 0) {
+    for (const line of result.diagnostics ?? []) console.log(line);
     return fail(`failed: no events found (${result.notes.join("; ")})`);
   }
 
