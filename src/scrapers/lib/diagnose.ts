@@ -6,8 +6,20 @@ import { stripTags } from "./html";
 // parser later can see the real structure in the logs without having to
 // fetch the page themselves. Keeps each line short enough for log
 // viewers; never throws.
-export function diagnosePage(url: string, html: string): string[] {
+export function diagnosePage(
+  url: string,
+  html: string,
+  meta?: { requestedUrl?: string; status?: number; contentType?: string; hops?: number }
+): string[] {
   const lines: string[] = [];
+  if (meta) {
+    lines.push(
+      `[diagnose] fetch: requested=${meta.requestedUrl ?? url} final=${url} status=${meta.status ?? "?"} type="${meta.contentType ?? ""}" metaRefreshHops=${meta.hops ?? 0}`
+    );
+  }
+  // The single most useful line when a page comes back unexpectedly
+  // small: the actual bytes, so a stub/redirect/challenge is visible.
+  lines.push(`[diagnose] raw head: ${JSON.stringify(html.slice(0, 400))}`);
   const grab = (re: RegExp, max: number) => {
     const out: string[] = [];
     let m: RegExpExecArray | null;

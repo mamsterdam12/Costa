@@ -1,5 +1,5 @@
 import type { ScrapedEvent, Scraper, ScrapeResult } from "./types";
-import { fetchJson, fetchText } from "./lib/http";
+import { fetchJson, fetchPage, type FetchedPage } from "./lib/http";
 import { extractJsonLdEvents } from "./lib/jsonld";
 import { absoluteUrl, stripTags } from "./lib/html";
 import { diagnosePage } from "./lib/diagnose";
@@ -33,13 +33,17 @@ export const theFarmScraper: Scraper = {
 
     // 1. JSON-LD
     const jsonLd: ScrapedEvent[] = [];
-    const fetched = new Map<string, string>();
+    const fetched = new Map<string, FetchedPage>();
     for (const page of pages) {
       try {
-        const html = await fetchText(page);
-        fetched.set(page, html);
-        const found = extractJsonLdEvents(html, page);
-        notes.push(`${page}: ${found.length} JSON-LD event(s)`);
+        const res = await fetchPage(page);
+        fetched.set(page, res);
+        // Resolve against the final URL: a redirect may have moved us.
+        const found = extractJsonLdEvents(res.html, res.url);
+        notes.push(
+          `${page}: ${res.html.length} chars, ${found.length} JSON-LD event(s)` +
+            (res.hops ? ` (after ${res.hops} meta-refresh hop(s) to ${res.url})` : "")
+        );
         jsonLd.push(...found);
       } catch (err) {
         notes.push(`${page}: fetch failed (${err instanceof Error ? err.message : err})`);
@@ -63,15 +67,22 @@ export const theFarmScraper: Scraper = {
     }
 
     // 3. HTML heuristic
-    for (const [page, html] of fetched) {
-      const events = heuristicEvents(html, page);
+    for (const [page, res] of fetched) {
+      const events = heuristicEvents(res.html, res.url);
       notes.push(`${page}: ${events.length} heuristic event(s)`);
       if (events.length > 0) {
         return { events, strategy: "html-heuristic", confidence: "low", notes };
       }
     }
 
-    const diagnostics = [...fetched].flatMap(([page, html]) => diagnosePage(page, html));
+    const diagnostics = [...fetched].flatMap(([page, res]) =>
+      diagnosePage(res.url, res.html, {
+        requestedUrl: page,
+        status: res.status,
+        contentType: res.contentType,
+        hops: res.hops,
+      })
+    );
     return { events: [], strategy: "none", confidence: "low", notes, diagnostics };
   },
 };
