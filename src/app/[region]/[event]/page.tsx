@@ -1,21 +1,29 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { defaultLocale, isLocale, type Locale } from "@/lib/i18n";
+import { defaultLocale, isLocale, ui, type Locale } from "@/lib/i18n";
 import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
 
 export const dynamic = "force-dynamic";
 
-function formatDateRange(start: Date, end: Date | null, locale: Locale) {
-  const fmt = new Intl.DateTimeFormat(locale, {
+function formatDate(date: Date, locale: Locale) {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "long",
     day: "numeric",
     month: "long",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
-  if (!end) return fmt.format(start);
-  return `${fmt.format(start)} — ${fmt.format(end)}`;
+  }).format(date);
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2 border-b border-sea-100 py-2 text-sm last:border-0">
+      <dt className="w-28 shrink-0 font-medium text-sea-900/50">{label}</dt>
+      <dd className="text-sea-900/90">{value}</dd>
+    </div>
+  );
 }
 
 export default async function EventPage({
@@ -61,20 +69,23 @@ export default async function EventPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <Link href={`/${regionSlug}${sp.lang ? `?lang=${sp.lang}` : ""}`} className="text-sm font-medium text-sun-600 hover:underline">
+      <Link
+        href={`/${regionSlug}${sp.lang ? `?lang=${sp.lang}` : ""}`}
+        className="text-sm font-medium text-sun-600 hover:underline"
+      >
         &larr; {regionName}
       </Link>
 
-      <h1 className="mt-4 text-3xl font-bold text-sea-900">{title}</h1>
-      <p className="mt-2 text-sm text-sea-900/60">
-        {formatDateRange(event.startsAt, event.endsAt, locale)}
-        {event.venueName ? ` · ${event.venueName}` : ""}
-      </p>
-      <p className="mt-1 text-xs text-sea-900/50">
-        {categoryName}
-        {event.organizer ? ` · ${event.organizer.name}` : ""}
-        {event.recurrenceRule ? ` · ${event.recurrenceRule}` : ""}
-      </p>
+      <h1 className="mt-4 text-4xl font-bold text-sea-900">{title}</h1>
+
+      <dl className="mt-6 rounded-xl border border-sea-100 bg-white px-5">
+        <DetailRow label={ui.startDate[locale]} value={formatDate(event.startsAt, locale)} />
+        {event.endsAt && (
+          <DetailRow label={ui.endDate[locale]} value={formatDate(event.endsAt, locale)} />
+        )}
+        {event.venueName && <DetailRow label={ui.location[locale]} value={event.venueName} />}
+        <DetailRow label={ui.category[locale]} value={categoryName} />
+      </dl>
 
       <div className="mt-6 rounded-xl border border-sea-100 bg-white p-6 text-sea-900/90">
         {description}
@@ -82,7 +93,7 @@ export default async function EventPage({
 
       {event.sourceUrl && (
         <p className="mt-4 text-xs text-sea-900/40">
-          Bron: <a href={event.sourceUrl} className="underline">{event.sourceUrl}</a>
+          {ui.source[locale]}: <a href={event.sourceUrl} className="underline">{event.sourceUrl}</a>
         </p>
       )}
     </div>
