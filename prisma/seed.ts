@@ -23,6 +23,14 @@ async function seedTranslation(
 }
 
 async function main() {
+  // One-time reset (requested 2026-09-21): wipe every previously-seeded
+  // event and its cached translations before reseeding below with a fresh
+  // set discovered via the SOURCE_DISCOVERY sources. This line is meant to
+  // be removed again once it's run once in production -- the seed script
+  // is otherwise idempotent-upsert-only and never deletes on its own.
+  await prisma.translation.deleteMany({ where: { entityType: "event" } });
+  await prisma.event.deleteMany({});
+
   // Clear any cached machine translations before reseeding the source
   // content below -- if a bad/stale source value was ever machine-
   // translated and cached, fixing the source alone wouldn't fix what's
@@ -65,9 +73,12 @@ async function main() {
 
   // Source registry: the real sites this seed's events were researched
   // from, registered as sources a future regular-scraping script can read
-  // and re-visit. discoveredBy: MANUAL/active: true since a person (this
-  // seed) vetted them; a periodic AI discovery run would instead insert
-  // new rows here with discoveredBy: AI, active: false, pending review.
+  // and re-visit. discoveredBy defaults to MANUAL below; entries found via
+  // an AI-assisted discovery pass over a SOURCE_DISCOVERY source set it to
+  // "AI" explicitly (active: true here since a human reviewed and
+  // approved them in the same pass that added their first event -- a
+  // fully automated discovery run would instead leave active: false
+  // pending review).
   //
   // Each `url` here is the organizer's own EVENTS overview page (what a
   // regular scraper script would crawl) -- distinct from an individual
@@ -77,49 +88,78 @@ async function main() {
   // the same role Eventbrite would play) that periodic AI discovery runs
   // use to *find* new EVENTS sources -- never scraped for events directly,
   // so no Event ever links to one via sourceKey below.
-  const sourceDefs = [
+  const sourceDefs: Array<{
+    key: string;
+    name: string;
+    url: string;
+    sourceType: string;
+    purpose: "EVENTS" | "SOURCE_DISCOVERY";
+    discoveredBy?: "MANUAL" | "AI";
+    notes?: string;
+  }> = [
     {
       key: "ayuntamiento-marbella",
       name: "Ayuntamiento de Marbella (Turismo agenda)",
       url: "https://turismo.marbella.es/agenda.html",
       sourceType: "html-listing",
-      purpose: "EVENTS" as const,
+      purpose: "EVENTS",
     },
     {
       key: "manolo-santana",
       name: "Manolo Santana Racquets Club",
       url: "https://manolosantana.es/en/mixin-paddle-tennis-matches/",
       sourceType: "html-listing",
-      purpose: "EVENTS" as const,
+      purpose: "EVENTS",
     },
     {
       key: "tablao-ana-maria",
       name: "Tablao Flamenco Ana Maria",
       url: "https://www.flamencoanamariamarbella.com/",
       sourceType: "html-listing",
-      purpose: "EVENTS" as const,
+      purpose: "EVENTS",
     },
     {
       key: "the-farm",
       name: "The Farm Marbella",
       url: "https://thefarm-marbella.com/whats-on/",
       sourceType: "html-listing",
-      purpose: "EVENTS" as const,
+      purpose: "EVENTS",
     },
     {
       key: "marbella4dayswalking",
       name: "Marbella 4Days Walking",
       url: "https://marbella4dayswalking.com/",
       sourceType: "html-listing",
-      purpose: "EVENTS" as const,
+      purpose: "EVENTS",
     },
     {
       key: "myguide-marbella",
       name: "My Guide Marbella",
       url: "https://www.myguidemarbella.com/",
       sourceType: "html-listing",
-      purpose: "SOURCE_DISCOVERY" as const,
+      purpose: "SOURCE_DISCOVERY",
       notes: "Travel-guide directory covering many unrelated venues (like Eventbrite) -- a source for finding sources, not for scraping events directly.",
+    },
+    // Found via a discovery pass over the SOURCE_DISCOVERY source above
+    // (My Guide Marbella's nightlife/events listings) -- the two venues
+    // below turned up there and were then verified and registered here
+    // as their own direct EVENTS sources.
+    {
+      key: "premiere-club",
+      name: "Premiere Club Marbella",
+      url: "https://www.facebook.com/PremiereClubMarbella/",
+      sourceType: "facebook-page",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
+      notes: "No dedicated events website; Facebook is their primary public events channel.",
+    },
+    {
+      key: "nikki-beach",
+      name: "Nikki Beach Marbella",
+      url: "https://nikkibeach.com/marbella/happenings/",
+      sourceType: "html-listing",
+      purpose: "EVENTS",
+      discoveredBy: "AI",
     },
   ];
   const sourceByKey: Record<string, Awaited<ReturnType<typeof prisma.source.upsert>>> = {};
@@ -127,7 +167,7 @@ async function main() {
     sourceByKey[key] = await prisma.source.upsert({
       where: { url: s.url },
       update: { name: s.name, sourceType: s.sourceType, purpose: s.purpose, regionId: marbella.id },
-      create: { ...s, regionId: marbella.id, discoveredBy: "MANUAL", active: true },
+      create: { ...s, regionId: marbella.id, discoveredBy: s.discoveredBy ?? "MANUAL", active: true },
     });
   }
 
@@ -192,6 +232,8 @@ async function main() {
       { slug: "tablao-ana-maria", name: "Tablao Flamenco Ana Maria", website: "https://www.flamencoanamariamarbella.com" },
       { slug: "the-farm-marbella", name: "The Farm Marbella", website: "https://thefarm-marbella.com" },
       { slug: "marbella-4days-walking", name: "Marbella 4Days Walking", website: "https://marbella4dayswalking.com" },
+      { slug: "premiere-club", name: "Premiere Club Marbella", website: "https://www.facebook.com/PremiereClubMarbella/" },
+      { slug: "nikki-beach-marbella", name: "Nikki Beach Marbella", website: "https://nikkibeach.com/marbella/" },
     ].map(({ slug, ...data }) => prisma.organizer.upsert({ where: { slug }, update: data, create: { slug, ...data } }))
   );
   const organizerBySlug = Object.fromEntries(organizers.map((o) => [o.slug, o]));
@@ -221,132 +263,47 @@ async function main() {
     communityId?: string;
   }> = [
     {
-      slug: "tododanza-festival-2026",
-      titleNl: "TodoDanza Festival",
+      slug: "premiere-club-easter-triple-headliner-2026",
+      titleNl: "Paasweekend Triple Headliner bij Premiere Club",
       descriptionNl:
-        "16e editie van het TodoDanza Festival: hedendaagse dans en flamenco met 13 gezelschappen en meer dan 40 artiesten, verspreid over meerdere locaties in Marbella.",
-      titleEn: "TodoDanza Festival",
+        "Drie avonden gratis livemuziek bij Premiere Club aan de Plaza de los Olivos: Los Calvin opent op donderdag, The Hype speelt op vrijdag en Mami Curl sluit het Paasweekend triple-headliner-weekend af.",
+      titleEn: "Easter Weekend Triple Headliner at Premiere Club",
       descriptionEn:
-        "16th edition of the TodoDanza Festival: contemporary dance and flamenco performances with 13 companies and over 40 artists across several venues in Marbella.",
-      titleEs: "Festival TodoDanza",
+        "Three nights of free live music at Premiere Club on Plaza de los Olivos: Los Calvin opens on Thursday, The Hype takes the stage Friday, and Mami Curl closes out the Easter weekend triple-headliner.",
+      titleEs: "Triple cartel del fin de semana de Pascua en Premiere Club",
       descriptionEs:
-        "16ª edición del Festival TodoDanza: danza contemporánea y flamenco con 13 compañías y más de 40 artistas en varias sedes de Marbella.",
-      startsAt: new Date("2026-10-04T19:00:00+02:00"),
-      endsAt: new Date("2026-11-08T22:00:00+01:00"),
-      venueName: "Teatro Ciudad de Marbella",
-      categorySlug: "cultuur",
-      organizerSlug: "ayuntamiento-marbella",
-      sourceKey: "ayuntamiento-marbella",
-      sourceUrl: "https://turismo.marbella.es/agenda/festival-marbella-todo-danza.html",
-      sourceLocale: "es",
-      costType: "PAID",
-      costAmount: "€15",
-    },
-    {
-      slug: "marbella-4-days-walking-2026",
-      titleNl: "Marbella 4 Days Walking",
-      descriptionNl:
-        "Vier dagen wandelen door Marbella met routes van 10, 20 of 30 kilometer per dag, samen met duizenden andere deelnemers.",
-      titleEn: "Marbella 4 Days Walking",
-      descriptionEn:
-        "Four days of walking through Marbella with 10, 20 or 30 km routes each day, alongside thousands of other participants.",
-      titleEs: "Marbella 4 Days Walking",
-      descriptionEs:
-        "Cuatro días caminando por Marbella con rutas de 10, 20 o 30 km cada día, junto a miles de participantes.",
-      startsAt: new Date("2026-10-01T09:00:00+02:00"),
-      endsAt: new Date("2026-10-04T14:00:00+02:00"),
-      venueName: "Startpunt centrum Marbella",
-      categorySlug: "sport-fitness",
-      organizerSlug: "marbella-4days-walking",
-      sourceKey: "marbella4dayswalking",
-      sourceUrl: "https://marbella4dayswalking.com/",
-      sourceLocale: "nl",
-      costType: "PAID",
-      costAmount: "€25 per dag, of €85 voor alle 4 dagen (online registratie)",
-    },
-    {
-      slug: "weekmarkt-marbella-maandag",
-      titleNl: "Wekelijkse markt Marbella",
-      descriptionNl:
-        "Elke maandag houdt Marbella zijn weekmarkt met verse producten, kleding, sieraden en meer.",
-      titleEn: "Marbella weekly street market",
-      descriptionEn:
-        "Every Monday Marbella holds its weekly street market with fresh produce, clothing, jewellery and more.",
-      titleEs: "Mercadillo semanal de Marbella",
-      descriptionEs:
-        "Cada lunes Marbella celebra su mercadillo semanal con productos frescos, ropa, joyería y más.",
-      startsAt: new Date("2026-09-28T09:00:00+02:00"),
-      endsAt: new Date("2026-09-28T14:00:00+02:00"),
-      recurrenceRule: "WEEKLY;BYDAY=MO",
-      venueName: "Avenida Doctor Maiz Viñals, Marbella",
-      categorySlug: "markten-shopping",
-      sourceKey: "ayuntamiento-marbella",
+        "Tres noches de música en vivo gratuita en Premiere Club, en la Plaza de los Olivos: Los Calvin abre el jueves, The Hype toca el viernes y Mami Curl cierra el fin de semana de Pascua con un triple cartel.",
+      startsAt: new Date("2026-04-02T23:30:00+02:00"),
+      endsAt: new Date("2026-04-05T02:00:00+02:00"),
+      venueName: "Premiere Club, Plaza de los Olivos, Marbella",
+      categorySlug: "muziek-uitgaan",
+      organizerSlug: "premiere-club",
+      sourceKey: "premiere-club",
       sourceUrl:
-        "https://turismo.marbella.es/vive/compras/mercados-de-abastos-y-mercadillos/mercadillo-marbella.html",
-      sourceLocale: "es",
+        "https://euroweeklynews.com/2026/03/30/marbella-premiere-clubs-triple-headliner-weekend-los-calvin-the-hype-mami-curl/",
+      sourceLocale: "en",
       costType: "FREE",
     },
     {
-      slug: "sunday-padel-mix-in",
-      titleNl: "Sunday Padel Mix-In",
-      descriptionNl: "Wekelijkse gemengde padel mix-in voor niveau 1-4, inclusief BBQ na afloop.",
-      titleEn: "Sunday Padel Mix-In",
-      descriptionEn: "Weekly mixed-level padel mix-in for levels 1-4, with a BBQ afterwards.",
-      titleEs: "Mix-In de pádel del domingo",
-      descriptionEs: "Mix-in de pádel semanal para niveles 1-4, con barbacoa al finalizar.",
-      startsAt: new Date("2026-09-27T12:00:00+02:00"),
-      endsAt: new Date("2026-09-27T14:00:00+02:00"),
-      recurrenceRule: "WEEKLY;BYDAY=SU",
-      venueName: "Manolo Santana Racquets Club",
-      categorySlug: "sport-fitness",
-      organizerSlug: "manolo-santana-club",
-      sourceKey: "manolo-santana",
-      sourceUrl: "https://manolosantana.es/en/mixin-paddle-tennis-matches/",
+      slug: "nikki-beach-23rd-anniversary-disco-del-sol",
+      titleNl: "Disco del Sol – 23e Verjaardag",
+      descriptionNl:
+        "Nikki Beach Marbella viert zijn 23e verjaardag met Disco Fever: een dagfeest in Studio 54-stijl met discoremixen, gouden decor en dansen van de middag tot de avond.",
+      titleEn: "Disco del Sol – 23rd Anniversary",
+      descriptionEn:
+        "Nikki Beach Marbella marks its 23rd anniversary with Disco Fever: a Studio 54-style daytime celebration with disco remixes, golden decor and non-stop dancing from noon into the evening.",
+      titleEs: "Disco del Sol – 23º Aniversario",
+      descriptionEs:
+        "Nikki Beach Marbella celebra su 23º aniversario con Disco Fever: una fiesta diurna al estilo Studio 54 con remixes disco, decoración dorada y baile sin parar desde el mediodía hasta la noche.",
+      startsAt: new Date("2026-08-14T12:00:00+02:00"),
+      endsAt: new Date("2026-08-14T19:00:00+02:00"),
+      venueName: "Nikki Beach Marbella",
+      categorySlug: "muziek-uitgaan",
+      organizerSlug: "nikki-beach-marbella",
+      sourceKey: "nikki-beach",
+      sourceUrl: "https://nikkibeach.com/marbella/happenings/disco-del-sol-23rd-anniversary/",
       sourceLocale: "en",
       costType: "UNKNOWN",
-      communityId: nuevaAndalucia.id,
-    },
-    {
-      slug: "flamenco-show-ana-maria",
-      titleNl: "Flamenco Show",
-      descriptionNl:
-        "Anderhalf uur pure flamenco: gitaar, zang en dans in het historische centrum van Marbella.",
-      titleEn: "Flamenco Show",
-      descriptionEn:
-        "An hour and a half of pure flamenco: guitar, singing and dance in Marbella's historic old town.",
-      titleEs: "Espectáculo de flamenco",
-      descriptionEs:
-        "Hora y media de flamenco puro: guitarra, cante y baile en el casco antiguo de Marbella.",
-      startsAt: new Date("2026-09-24T21:00:00+02:00"),
-      endsAt: new Date("2026-09-24T22:30:00+02:00"),
-      recurrenceRule: "WEEKLY",
-      venueName: "Tablao Flamenco Ana Maria, Marbella Old Town",
-      categorySlug: "muziek-uitgaan",
-      organizerSlug: "tablao-ana-maria",
-      sourceKey: "tablao-ana-maria",
-      sourceUrl: "https://www.flamencoanamariamarbella.com/",
-      sourceLocale: "es",
-      costType: "PAID",
-      costAmount: "€39-€85, afhankelijk van drankje of diner erbij",
-    },
-    {
-      slug: "the-farm-live-flamenco-dj",
-      titleNl: "Live Flamenco & DJ Night",
-      descriptionNl: "Live flamenco gevolgd door een DJ-set in het oude centrum van Marbella.",
-      titleEn: "Live Flamenco & DJ Night",
-      descriptionEn: "Live flamenco followed by a DJ set in Marbella's old town.",
-      titleEs: "Noche de flamenco en vivo y DJ",
-      descriptionEs: "Flamenco en directo seguido de sesión de DJ en el casco antiguo de Marbella.",
-      startsAt: new Date("2026-09-25T22:00:00+02:00"),
-      endsAt: new Date("2026-09-26T01:00:00+02:00"),
-      recurrenceRule: "WEEKLY;BYDAY=FR",
-      venueName: "The Farm Marbella",
-      categorySlug: "muziek-uitgaan",
-      organizerSlug: "the-farm-marbella",
-      sourceKey: "the-farm",
-      sourceUrl: "https://thefarm-marbella.com/whats-on/",
-      sourceLocale: "en",
-      costType: "FREE",
     },
   ];
 

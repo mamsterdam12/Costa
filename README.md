@@ -136,18 +136,25 @@ dat automatisch nieuwe events vindt.
 
 ## Seed-data
 
-`prisma/seed.ts` bevat echte, via research gevonden events in Marbella:
-TodoDanza Festival, Marbella 4 Days Walking, de wekelijkse maandagmarkt,
-de Sunday Padel Mix-In bij Manolo Santana Club, en flamenco/live-muziek
-avonden — elk met tekst in alle 3 nl/en/es, en, waar te achterhalen,
-kosteninformatie uit dezelfde research (bv. TodoDanza €15, Marbella 4
-Days Walking €25/dag). De padel mix-in is gekoppeld aan een voorbeeld-
-`Community` (Nueva Andalucía) om dat veld te demonstreren.
+`prisma/seed.ts` registreert eerst de bronnen (`Source`), waaronder My
+Guide Marbella als `SOURCE_DISCOVERY` (een aggregator, zoals Eventbrite
+— nooit zelf gescraped voor events, alleen gebruikt om nieuwe
+`EVENTS`-bronnen te vínden). Twee van de geregistreerde `EVENTS`-bronnen
+(Premiere Club Marbella, Nikki Beach Marbella) zijn zo gevonden: via een
+discovery-pass over My Guide Marbella's nightlife/events-overzichten,
+waarna hun eigen kanaal (Facebook resp. hun officiële events-pagina) is
+geverifieerd en geregistreerd, en er vervolgens één echt, via research
+gevonden event per bron is toegevoegd — precies het `SOURCE_DISCOVERY`
+→ `EVENTS`-bron → event-pijplijn uit de architectuur hierboven, nu voor
+het eerst met dit doel uitgevoerd. De overige geregistreerde bronnen
+(Ayuntamiento, Manolo Santana, Tablao Ana Maria, The Farm, Marbella
+4Days Walking) staan nog steeds klaar voor toekomstige events, maar
+hebben er momenteel geen aan gekoppeld.
 
 Voor elk event is `sourceUrl` de échte specifieke detailpagina (niet een
 overzicht) en is `sourceLocale` de taal van díe pagina, zoals hierboven
-beschreven — dus bv. Spaans voor TodoDanza (turismo.marbella.es) en
-Engels voor de padel mix-in (manolosantana.es/en/...). De canonieke
+beschreven — dus bv. Engels voor zowel Premiere Club
+(euroweeklynews.com) als Nikki Beach (nikkibeach.com). De canonieke
 `title`/`description` van elk event staan in die brontaal; de andere
 twee talen komen uit de handmatig gecureerde `Translation`-cache
 (`source: HUMAN`), niet uit een live veld.
