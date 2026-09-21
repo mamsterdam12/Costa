@@ -40,5 +40,12 @@ export type Scraper = {
   sourceLocale: "nl" | "en" | "es";
   // Used when no keyword rule matches (see run.ts).
   defaultCategorySlug: string;
+  // A single-venue source knows where its events happen and who runs
+  // them, even though the listing never repeats it on each entry. Used
+  // as a fallback when the scraped event doesn't carry its own.
+  venueName?: string;
+  address?: string;
+  /** Slug of an existing Organizer row to attach these events to. */
+  organizerSlug?: string;
   run(source: { url: string }): Promise<ScrapeResult>;
 };

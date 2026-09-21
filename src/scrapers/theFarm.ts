@@ -27,6 +27,11 @@ export const theFarmScraper: Scraper = {
     "What's On / upcoming events at The Farm, Marbella old town. Reads their JetEngine month calendar; falls back to JSON-LD and the WP events API if the site ever changes.",
   sourceLocale: "en",
   defaultCategorySlug: "muziek-uitgaan",
+  // The calendar entries are just "Flamenco / Dinner Show / From 7.30PM"
+  // -- the venue is implied by the site, so fill it in here.
+  venueName: "The Farm Marbella",
+  address: "Pl. Altamirano 3, 29601 Marbella, Málaga",
+  organizerSlug: "the-farm-marbella",
 
   async run(source) {
     const notes: string[] = [];
@@ -78,7 +83,10 @@ export const theFarmScraper: Scraper = {
     // 3. JetEngine listing calendar (what this site actually uses)
     for (const [page, res] of fetched) {
       const cal = parseJetCalendar(res.html, res.url);
-      notes.push(`${page}: jet-calendar ${cal.label}, ${cal.events.length} event(s)`);
+      notes.push(
+        `${page}: jet-calendar ${cal.label}, ${cal.events.length} event(s)` +
+          (cal.events[0] ? `, first: "${cal.events[0].title}" -> ${cal.events[0].sourceUrl}` : "")
+      );
       if (cal.events.length > 0) {
         return {
           events: dedupe(cal.events),

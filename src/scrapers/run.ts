@@ -97,6 +97,13 @@ export async function runScraperForSource(sourceId: string): Promise<RunSummary>
     return fail(`failed: no events found (${result.notes.join("; ")})`);
   }
 
+  const organizer = scraper.organizerSlug
+    ? await prisma.organizer.findUnique({ where: { slug: scraper.organizerSlug } })
+    : null;
+  if (scraper.organizerSlug && !organizer) {
+    summary.notes.push(`organizer "${scraper.organizerSlug}" not found -- events will have none`);
+  }
+
   const categories = await prisma.eventCategory.findMany();
   const categoryBySlug = new Map(categories.map((c) => [c.slug, c]));
   const fallbackCategory = categoryBySlug.get(scraper.defaultCategorySlug) ?? categories[0];
@@ -111,11 +118,12 @@ export async function runScraperForSource(sourceId: string): Promise<RunSummary>
       description: ev.description,
       sourceLocale: scraper.sourceLocale,
       endsAt: ev.endsAt ?? null,
-      venueName: ev.venueName ?? null,
-      address: ev.address ?? null,
+      venueName: ev.venueName ?? scraper.venueName ?? null,
+      address: ev.address ?? scraper.address ?? null,
       costType: ev.costType ?? ("UNKNOWN" as const),
       costAmount: ev.costAmount ?? null,
       categoryId: category.id,
+      organizerId: organizer?.id ?? null,
       sourceId: source.id,
       sourceUrl: ev.sourceUrl,
       lastSeenAt: now,

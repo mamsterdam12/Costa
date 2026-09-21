@@ -18,11 +18,25 @@ function formatDate(date: Date, locale: Locale) {
   });
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+// Every field is rendered whether or not it holds anything: an empty row
+// is itself information (it shows what a source didn't give us), which is
+// hard to see when empty fields are simply hidden.
+function DetailRow({
+  label,
+  value,
+  emptyLabel,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  emptyLabel: string;
+}) {
+  const text = value === null || value === undefined || value === "" ? null : String(value);
   return (
     <div className="flex gap-2 border-b border-sea-100 py-2 text-sm last:border-0">
-      <dt className="w-28 shrink-0 font-medium text-sea-900/50">{label}</dt>
-      <dd className="text-sea-900/90">{value}</dd>
+      <dt className="w-32 shrink-0 font-medium text-sea-900/50">{label}</dt>
+      <dd className={text ? "min-w-0 break-words text-sea-900/90" : "italic text-sea-900/30"}>
+        {text ?? `— ${emptyLabel}`}
+      </dd>
     </div>
   );
 }
@@ -40,7 +54,15 @@ export default async function EventPage({
 
   const event = await prisma.event.findUnique({
     where: { slug: eventSlug },
-    include: { category: true, organizer: true, region: true, community: true, source: true },
+    include: {
+      category: true,
+      organizer: true,
+      region: true,
+      community: true,
+      source: true,
+      duplicateOf: { select: { slug: true, title: true } },
+      createdByUser: { select: { name: true, email: true } },
+    },
   });
 
   if (!event || event.region.slug !== regionSlug) notFound();
@@ -75,6 +97,8 @@ export default async function EventPage({
         ? event.costAmount || ui.cost[locale]
         : ui.costUnknown[locale];
 
+  const rowProps = { emptyLabel: ui.empty[locale] };
+
   let sourceLanguageLabel: string | null = null;
   try {
     sourceLanguageLabel = new Intl.DisplayNames([locale], { type: "language" }).of(
@@ -105,38 +129,59 @@ export default async function EventPage({
       )}
 
       <dl className="mt-6 rounded-xl border border-sea-100 bg-white px-5">
-        <DetailRow label={ui.startDate[locale]} value={formatDate(event.startsAt, locale)} />
-        {event.endsAt && (
-          <DetailRow label={ui.endDate[locale]} value={formatDate(event.endsAt, locale)} />
-        )}
-        {event.recurrenceRule && (
-          <DetailRow label={ui.recurrence[locale]} value={event.recurrenceRule} />
-        )}
-        {event.venueName && <DetailRow label={ui.location[locale]} value={event.venueName} />}
-        {event.address && <DetailRow label={ui.address[locale]} value={event.address} />}
-        {event.latitude != null && event.longitude != null && (
-          <DetailRow
-            label={ui.coordinates[locale]}
-            value={`${event.latitude}, ${event.longitude}`}
-          />
-        )}
-        <DetailRow label={ui.category[locale]} value={categoryName} />
-        <DetailRow label={ui.cost[locale]} value={costLabel} />
-        {event.community && (
-          <DetailRow label={ui.community[locale]} value={event.community.name} />
-        )}
-        {event.organizer && (
-          <DetailRow
-            label={ui.organizer[locale]}
-            value={event.organizer.website ? `${event.organizer.name} (${event.organizer.website})` : event.organizer.name}
-          />
-        )}
-        <DetailRow label={ui.status[locale]} value={event.status} />
-        {sourceLanguageLabel && (
-          <DetailRow label={ui.sourceLanguage[locale]} value={sourceLanguageLabel} />
-        )}
-        <DetailRow label={ui.addedOn[locale]} value={formatDate(event.createdAt, locale)} />
-        <DetailRow label={ui.lastUpdated[locale]} value={formatDate(event.updatedAt, locale)} />
+        <DetailRow label={ui.startDate[locale]} value={formatDate(event.startsAt, locale)} {...rowProps} />
+        <DetailRow
+          label={ui.endDate[locale]}
+          value={event.endsAt && formatDate(event.endsAt, locale)}
+          {...rowProps}
+        />
+        <DetailRow label={ui.recurrence[locale]} value={event.recurrenceRule} {...rowProps} />
+        <DetailRow label={ui.location[locale]} value={event.venueName} {...rowProps} />
+        <DetailRow label={ui.address[locale]} value={event.address} {...rowProps} />
+        <DetailRow
+          label={ui.coordinates[locale]}
+          value={
+            event.latitude != null && event.longitude != null
+              ? `${event.latitude}, ${event.longitude}`
+              : null
+          }
+          {...rowProps}
+        />
+        <DetailRow label={ui.category[locale]} value={categoryName} {...rowProps} />
+        <DetailRow label={ui.cost[locale]} value={costLabel} {...rowProps} />
+        <DetailRow label={ui.community[locale]} value={event.community?.name} {...rowProps} />
+        <DetailRow
+          label={ui.organizer[locale]}
+          value={
+            event.organizer &&
+            (event.organizer.website
+              ? `${event.organizer.name} (${event.organizer.website})`
+              : event.organizer.name)
+          }
+          {...rowProps}
+        />
+        <DetailRow label={ui.region[locale]} value={regionName} {...rowProps} />
+        <DetailRow label={ui.status[locale]} value={event.status} {...rowProps} />
+        <DetailRow label={ui.sourceLanguage[locale]} value={sourceLanguageLabel} {...rowProps} />
+        <DetailRow label={ui.image[locale]} value={event.imageKey} {...rowProps} />
+        <DetailRow label={ui.source[locale]} value={event.source?.name} {...rowProps} />
+        <DetailRow label={ui.eventUrl[locale]} value={event.sourceUrl} {...rowProps} />
+        <DetailRow label={ui.scraper[locale]} value={event.sourceName} {...rowProps} />
+        <DetailRow label={ui.externalId[locale]} value={event.externalId} {...rowProps} />
+        <DetailRow
+          label={ui.lastSeen[locale]}
+          value={event.lastSeenAt && formatDate(event.lastSeenAt, locale)}
+          {...rowProps}
+        />
+        <DetailRow label={ui.duplicateOf[locale]} value={event.duplicateOf?.title} {...rowProps} />
+        <DetailRow
+          label={ui.createdBy[locale]}
+          value={event.createdByUser?.name ?? event.createdByUser?.email}
+          {...rowProps}
+        />
+        <DetailRow label={ui.slug[locale]} value={event.slug} {...rowProps} />
+        <DetailRow label={ui.addedOn[locale]} value={formatDate(event.createdAt, locale)} {...rowProps} />
+        <DetailRow label={ui.lastUpdated[locale]} value={formatDate(event.updatedAt, locale)} {...rowProps} />
       </dl>
 
       <div className="mt-6 rounded-xl border border-sea-100 bg-white p-6 text-sea-900/90">

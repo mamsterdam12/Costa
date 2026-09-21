@@ -65,7 +65,11 @@ function parseTime(text: string): { hour: number; minute: number } | null {
   return null;
 }
 
-function firstHref(html: string, pageUrl: string): string | null {
+// Only look at the start of the block: without a real DOM the slices run
+// on to the next marker, so a link found far down is as likely to belong
+// to the next element as to this event.
+function firstHref(block: string, pageUrl: string): string | null {
+  const html = block.slice(0, 400);
   for (const m of html.matchAll(/<a[^>]*href=["']([^"']+)["']/gi)) {
     const href = m[1];
     if (href.startsWith("#") || /^(javascript|mailto|tel):/i.test(href)) continue;
