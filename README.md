@@ -45,6 +45,15 @@ dat automatisch nieuwe events vindt.
   padel-mix-in. Dit kan later uitgebreid worden naar volledige
   Organizer/EventSeries/EventInstance-objecten zodra losse instances
   nodig zijn.
+- **Event-afbeeldingen** (`src/lib/imageGeneration.ts`): lazy gegenereerd
+  via OpenAI's Images API (`OPENAI_IMAGE_MODEL`, default `gpt-image-1`) op
+  basis van titel/omschrijving/locatie/categorie, en daarna permanent
+  opgeslagen in de "costa-media" Railway-bucket (`Event.imageKey`) zodat
+  hetzelfde event nooit twee keer gegenereerd wordt. Railway-buckets zijn
+  privé (geen publieke URL), dus afbeeldingen worden geserveerd via
+  `/api/images/[...key]`, dat de bucket proxyt. Zonder `OPENAI_API_KEY`/
+  credits of bucket-configuratie toont de kaart gewoon geen foto (geen
+  crash).
 
 ## Seed-data
 
@@ -70,18 +79,20 @@ Postgres-database in hetzelfde project. Het pre-deploy commando voert bij
 elke deploy `prisma db push` en `prisma db seed` uit (idempotent, dus
 veilig om steeds opnieuw te draaien).
 
-## OPENAI_API_KEY / OPENAI_MODEL
+## Environment variables (Railway)
 
-Voor machine-vertaling van talen die niet in de seed zitten (alles behalve
-NL/EN/ES) staan `OPENAI_API_KEY` en `OPENAI_MODEL` op de Costa-service in
-Railway. Zonder geldige key/model werkt de site gewoon door, alleen blijft
-een niet-gecachede taal in de brontekst staan (zie deploy-logs voor de
-reden).
+- `OPENAI_API_KEY` / `OPENAI_MODEL` — vertaling (chat completions).
+- `OPENAI_IMAGE_MODEL` — beeldgeneratie (default `gpt-image-1`).
+- `BUCKET` / `ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` / `REGION` / `ENDPOINT`
+  — S3-credentials van de "costa-media" Railway-bucket, als variable
+  references (`${{costa-media.BUCKET}}` etc.) op de Costa-service gezet.
+
+Zonder geldige OpenAI-key/credits werkt de site gewoon door: vertaling
+valt terug op de brontekst, afbeeldingen blijven leeg. Zie de deploy-logs
+voor de exacte reden (bv. "no credits remaining").
 
 ## Volgende stappen
 
-- `OPENAI_MODEL` verifiëren/aanpassen zodra bekend is welke exacte
-  model-id de gewenste versie heeft.
 - Scrapingscript dat nieuwe events vindt (Eventbrite, gemeentekalenders,
   organizer-sites) en upsert via `sourceName`/`externalId`.
 - Volledige categorieënboom uit het conceptdocument.

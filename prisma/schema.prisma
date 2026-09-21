@@ -83,6 +83,12 @@ model Event {
   latitude  Float?
   longitude Float?
 
+  // Object key in the "costa-media" bucket (e.g. "events/<slug>.png"),
+  // generated lazily and cached the same way translations are -- see
+  // src/lib/imageGeneration.ts. Served through /api/images/[...key]
+  // since Railway buckets have no public URL mode.
+  imageKey String?
+
   region   Region @relation(fields: [regionId], references: [id])
   regionId String
 

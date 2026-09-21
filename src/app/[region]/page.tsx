@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { defaultLocale, isLocale, locales, ui, type Locale } from "@/lib/i18n";
 import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
+import { getOrGenerateEventImageUrl } from "@/lib/imageGeneration";
+import { excerpt } from "@/lib/text";
 import { dateFilterRange, dateFilterLabels, type DateFilter } from "@/lib/eventFilters";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +62,7 @@ export default async function RegionPage({
       }),
     }))
   );
+  const categoryNameById = new Map(translatedCategories.map((c) => [c.id, c.translatedName]));
 
   const [from, to] = activeFilter ? dateFilterRange(activeFilter) : [undefined, undefined];
 
@@ -76,22 +79,23 @@ export default async function RegionPage({
 
   const translatedEvents = await Promise.all(
     events.map(async (event) => {
-      const { title, description } = await getTranslatedFields(
-        "event",
-        event.id,
-        event.sourceLocale as Locale,
-        locale,
-        { title: event.title, description: event.description }
-      );
-      const categoryName = await getTranslatedField({
-        entityType: "eventCategory",
-        entityId: event.category.id,
-        field: "name",
-        sourceText: event.category.name,
-        sourceLocale: event.category.sourceLocale as Locale,
-        targetLocale: locale,
-      });
-      return { ...event, title, description, categoryName };
+      const categoryName = categoryNameById.get(event.categoryId) ?? event.category.name;
+      const [{ title, description }, imageUrl] = await Promise.all([
+        getTranslatedFields("event", event.id, event.sourceLocale as Locale, locale, {
+          title: event.title,
+          description: event.description,
+        }),
+        getOrGenerateEventImageUrl({
+          id: event.id,
+          slug: event.slug,
+          imageKey: event.imageKey,
+          title: event.title,
+          description: event.description,
+          venueName: event.venueName,
+          categoryName: event.category.name,
+        }),
+      ]);
+      return { ...event, title, description, categoryName, imageUrl };
     })
   );
 
@@ -173,26 +177,40 @@ export default async function RegionPage({
         ))}
       </div>
 
-      <ul className="mt-8 space-y-4">
+      <ul className="mt-8 grid gap-5 sm:grid-cols-2">
         {translatedEvents.length === 0 && (
-          <li className="rounded-xl border border-dashed border-sea-100 p-6 text-center text-sea-900/60">
+          <li className="rounded-xl border border-dashed border-sea-100 p-6 text-center text-sea-900/60 sm:col-span-2">
             {ui.noEvents[locale]}
           </li>
         )}
         {translatedEvents.map((event) => (
-          <li key={event.id} className="rounded-xl border border-sea-100 bg-white p-5">
-            <Link
-              href={`/${regionSlug}/${event.slug}${sp.lang ? `?lang=${sp.lang}` : ""}`}
-              className="text-lg font-semibold text-sea-600 hover:underline"
-            >
-              {event.title}
+          <li key={event.id} className="overflow-hidden rounded-xl border border-sea-100 bg-white">
+            <Link href={`/${regionSlug}/${event.slug}${sp.lang ? `?lang=${sp.lang}` : ""}`}>
+              {event.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={event.imageUrl}
+                  alt={event.title}
+                  loading="lazy"
+                  className="h-44 w-full object-cover"
+                />
+              ) : (
+                <div className="h-44 w-full bg-sea-50" />
+              )}
             </Link>
-            <p className="mt-1 text-sm text-sea-900/70">{event.description}</p>
-            <p className="mt-2 text-xs text-sea-900/50">
-              {formatDate(event.startsAt, locale)}
-              {event.venueName ? ` · ${event.venueName}` : ""} · {event.categoryName}
-              {event.organizer ? ` · ${event.organizer.name}` : ""}
-            </p>
+            <div className="p-5">
+              <Link
+                href={`/${regionSlug}/${event.slug}${sp.lang ? `?lang=${sp.lang}` : ""}`}
+                className="text-lg font-semibold text-sea-600 hover:underline"
+              >
+                {event.title}
+              </Link>
+              <p className="mt-2 text-xs font-medium text-sea-900/50">
+                {formatDate(event.startsAt, locale)}
+                {event.venueName ? ` · ${event.venueName}` : ""}
+              </p>
+              <p className="mt-2 text-sm text-sea-900/70">{excerpt(event.description)}</p>
+            </div>
           </li>
         ))}
       </ul>

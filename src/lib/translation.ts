@@ -16,8 +16,12 @@ const languageNames: Record<Locale, string> = {
 // without a code deploy; falls back to a sane default if unset.
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 
+// This is a best-effort call with a same-request fallback (source text),
+// not a critical path worth retrying: default SDK retries (2, with
+// backoff) would make every field on a cold cache multiply into several
+// slow attempts per page load. Fail once, fast, and move on.
 const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0, timeout: 8000 })
   : null;
 
 type TranslateFieldInput = {
