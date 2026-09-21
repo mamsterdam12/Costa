@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { defaultLocale, isLocale, locales, translate, type Locale } from "@/lib/i18n";
+import { defaultLocale, isLocale, locales, type Locale } from "@/lib/i18n";
+import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
 import { dateFilterRange, dateFilterLabels, type DateFilter } from "@/lib/eventFilters";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,29 @@ export default async function RegionPage({
   const region = await prisma.region.findUnique({ where: { slug: regionSlug } });
   if (!region) notFound();
 
+  const regionName = await getTranslatedField({
+    entityType: "region",
+    entityId: region.id,
+    field: "name",
+    sourceText: region.name,
+    sourceLocale: region.sourceLocale as Locale,
+    targetLocale: locale,
+  });
+
   const categories = await prisma.eventCategory.findMany({ orderBy: { slug: "asc" } });
+  const translatedCategories = await Promise.all(
+    categories.map(async (c) => ({
+      ...c,
+      translatedName: await getTranslatedField({
+        entityType: "eventCategory",
+        entityId: c.id,
+        field: "name",
+        sourceText: c.name,
+        sourceLocale: c.sourceLocale as Locale,
+        targetLocale: locale,
+      }),
+    }))
+  );
 
   const [from, to] = activeFilter ? dateFilterRange(activeFilter) : [undefined, undefined];
 
@@ -50,6 +73,27 @@ export default async function RegionPage({
     include: { category: true, organizer: true },
     orderBy: { startsAt: "asc" },
   });
+
+  const translatedEvents = await Promise.all(
+    events.map(async (event) => {
+      const { title, description } = await getTranslatedFields(
+        "event",
+        event.id,
+        event.sourceLocale as Locale,
+        locale,
+        { title: event.title, description: event.description }
+      );
+      const categoryName = await getTranslatedField({
+        entityType: "eventCategory",
+        entityId: event.category.id,
+        field: "name",
+        sourceText: event.category.name,
+        sourceLocale: event.category.sourceLocale as Locale,
+        targetLocale: locale,
+      });
+      return { ...event, title, description, categoryName };
+    })
+  );
 
   const buildHref = (overrides: Partial<{ when: string; category: string; lang: string }>) => {
     const next = new URLSearchParams();
@@ -68,7 +112,7 @@ export default async function RegionPage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-sun-600">What&apos;s on</p>
-          <h1 className="text-3xl font-bold text-sea-900">{translate(region.name, locale)}</h1>
+          <h1 className="text-3xl font-bold text-sea-900">{regionName}</h1>
         </div>
         <div className="flex gap-2">
           {locales.map((l) => (
@@ -116,7 +160,7 @@ export default async function RegionPage({
         >
           {locale === "en" ? "All categories" : locale === "es" ? "Todas las categorías" : "Alle categorieën"}
         </Link>
-        {categories.map((c) => (
+        {translatedCategories.map((c) => (
           <Link
             key={c.slug}
             href={buildHref({ category: c.slug })}
@@ -124,13 +168,13 @@ export default async function RegionPage({
               sp.category === c.slug ? "bg-sun-500 text-sea-900" : "bg-white text-sea-600 border border-sea-100"
             }`}
           >
-            {translate(c.name, locale)}
+            {c.translatedName}
           </Link>
         ))}
       </div>
 
       <ul className="mt-8 space-y-4">
-        {events.length === 0 && (
+        {translatedEvents.length === 0 && (
           <li className="rounded-xl border border-dashed border-sea-100 p-6 text-center text-sea-900/60">
             {locale === "en"
               ? "No events found for this filter."
@@ -139,18 +183,18 @@ export default async function RegionPage({
                 : "Geen events gevonden voor dit filter."}
           </li>
         )}
-        {events.map((event) => (
+        {translatedEvents.map((event) => (
           <li key={event.id} className="rounded-xl border border-sea-100 bg-white p-5">
             <Link
               href={`/${regionSlug}/${event.slug}${sp.lang ? `?lang=${sp.lang}` : ""}`}
               className="text-lg font-semibold text-sea-600 hover:underline"
             >
-              {translate(event.title, locale)}
+              {event.title}
             </Link>
-            <p className="mt-1 text-sm text-sea-900/70">{translate(event.description, locale)}</p>
+            <p className="mt-1 text-sm text-sea-900/70">{event.description}</p>
             <p className="mt-2 text-xs text-sea-900/50">
               {formatDate(event.startsAt, locale)}
-              {event.venueName ? ` · ${event.venueName}` : ""} · {translate(event.category.name, locale)}
+              {event.venueName ? ` · ${event.venueName}` : ""} · {event.categoryName}
               {event.organizer ? ` · ${event.organizer.name}` : ""}
             </p>
           </li>

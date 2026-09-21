@@ -13,7 +13,8 @@ datasource db {
 model Region {
   id        String   @id @default(cuid())
   slug      String   @unique
-  name      Json // translations, e.g. { "nl": "Marbella", "en": "Marbella", "es": "Marbella" }
+  name      String // canonical text, in `sourceLocale` below
+  sourceLocale String @default("nl")
   country   String   @default("ES")
   latitude  Float?
   longitude Float?
@@ -26,11 +27,12 @@ model Region {
   createdAt DateTime @default(now())
 }
 
-// Flat-with-optional-parent category tree, translatable per locale.
+// Flat-with-optional-parent category tree.
 model EventCategory {
-  id   String @id @default(cuid())
-  slug String @unique
-  name Json // translations, e.g. { "nl": "Sport & fitness", "en": "Sport & fitness" }
+  id           String @id @default(cuid())
+  slug         String @unique
+  name         String // canonical text, in `sourceLocale` below
+  sourceLocale String @default("nl")
 
   parentId String?
   parent   EventCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
@@ -41,7 +43,8 @@ model EventCategory {
 
 // A business or person that runs events. A Business elsewhere in the
 // platform can double as an Organizer (see concept doc §13); kept standalone
-// here since the wider Business model doesn't exist yet.
+// here since the wider Business model doesn't exist yet. Not translated:
+// organizer names are proper nouns.
 model Organizer {
   id      String  @id @default(cuid())
   slug    String  @unique
@@ -65,10 +68,11 @@ enum EventStatus {
 // (per the concept doc) is a later step once recurring events need to be
 // managed without re-entering every occurrence by hand.
 model Event {
-  id          String    @id @default(cuid())
-  slug        String    @unique
-  title       Json // translations, e.g. { "nl": "...", "en": "...", "es": "..." }
-  description Json // translations, same shape as title
+  id          String @id @default(cuid())
+  slug        String @unique
+  title       String // canonical text, in `sourceLocale` below
+  description String // canonical text, in `sourceLocale` below
+  sourceLocale String @default("nl") // language this event was authored/found in
 
   startsAt       DateTime
   endsAt         DateTime?
@@ -103,4 +107,32 @@ model Event {
   @@unique([sourceName, externalId])
   @@index([regionId, startsAt])
   @@index([categoryId])
+}
+
+enum TranslationSource {
+  MACHINE
+  HUMAN
+}
+
+// Generic, cached translation for ANY translatable field on ANY entity in
+// the platform -- one shared mechanism for Events today, and for
+// Businesses, Marketplace listings, Announcements, forum posts, etc. as
+// those modules get built, instead of a bespoke translation table per
+// module. A row is created lazily the first time a locale is requested for
+// a given (entityType, entityId, field); `source: HUMAN` protects
+// curated/reviewed text from being overwritten by a machine translation.
+model Translation {
+  id         String            @id @default(cuid())
+  entityType String // e.g. "event", "region", "eventCategory", later "business", "listing", ...
+  entityId   String
+  field      String // e.g. "title", "description", "name"
+  locale     String
+  text       String
+  source     TranslationSource @default(MACHINE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityType, entityId, field, locale])
+  @@index([entityType, entityId])
 }

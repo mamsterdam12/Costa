@@ -14,12 +14,24 @@ dat automatisch nieuwe events vindt.
     platform lokaal aanvoelt, ook al draait alles op één database.
   - `EventCategory` — vertaalbare categorieën.
   - `Organizer` — wie het event organiseert.
-  - `Event` — vertaalbare titel/omschrijving (`title`/`description` zijn
-    JSON, bijv. `{ "nl": "...", "en": "...", "es": "..." }`), gekoppeld aan
-    regio en categorie.
-- **Meertaligheid**: `src/lib/i18n.ts` regelt de vertaling met fallback
-  (gekozen taal → NL → eerste beschikbare taal). Taal wisselen via
-  `?lang=nl|en|es` in de URL.
+  - `Event` — titel/omschrijving zijn platte tekst in de brontaal
+    (`sourceLocale`), gekoppeld aan regio en categorie.
+  - `Translation` — generieke, herbruikbare vertaalcache voor élk
+    vertaalbaar veld van élke entiteit in het platform (nu Event/Region/
+    EventCategory, straks Business/Listing/Announcement/forumpost/...),
+    sleutel `(entityType, entityId, field, locale)`.
+- **Meertaligheid** (`src/lib/translation.ts`): elke module slaat content
+  op in precies één brontaal. Een vertaling naar een andere taal wordt
+  lazy opgehaald: eerst de `Translation`-cache, en bij een cache-miss een
+  LLM-vertaling (Claude Haiku via `ANTHROPIC_API_KEY`) die meteen wordt
+  weggeschreven zodat elke vertaling maar één keer gegenereerd hoeft te
+  worden. Handmatig gecureerde vertalingen (zoals de EN/ES-teksten in de
+  seed) staan met `source: HUMAN` in de cache en worden nooit overschreven
+  door een machinevertaling. Nieuwe taal toevoegen (bv. Zweeds, Deens,
+  Duits) vereist dus geen her-seeden — de cache vult zichzelf aan zodra
+  iemand die taal bezoekt. Zonder `ANTHROPIC_API_KEY` valt het systeem
+  terug op de brontekst (geen crash, gewoon nog niet vertaald).
+  Taal wisselen via `?lang=nl|en|es` in de URL.
 - **Klaar voor automatisering**: `Event` heeft `sourceName`, `sourceUrl`,
   `externalId` en `lastSeenAt`, met een unique constraint op
   `(sourceName, externalId)`. Een toekomstig scrapingscript kan hiermee
@@ -57,8 +69,17 @@ Postgres-database in hetzelfde project. Het pre-deploy commando voert bij
 elke deploy `prisma db push` en `prisma db seed` uit (idempotent, dus
 veilig om steeds opnieuw te draaien).
 
+## ANTHROPIC_API_KEY
+
+Voor machine-vertaling van talen die niet in de seed zitten (alles behalve
+NL/EN/ES) moet `ANTHROPIC_API_KEY` gezet worden op de Costa-service in
+Railway. Zonder key werkt de site gewoon door, alleen blijft een
+niet-gecachede taal in de brontekst staan.
+
 ## Volgende stappen
 
+- `ANTHROPIC_API_KEY` toevoegen op Railway zodat machinevertaling voor
+  overige talen (Zweeds, Deens, Duits, ...) daadwerkelijk werkt.
 - Scrapingscript dat nieuwe events vindt (Eventbrite, gemeentekalenders,
   organizer-sites) en upsert via `sourceName`/`externalId`.
 - Volledige categorieënboom uit het conceptdocument.

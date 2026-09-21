@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { defaultLocale, isLocale, translate, type Locale } from "@/lib/i18n";
+import { defaultLocale, isLocale, type Locale } from "@/lib/i18n";
+import { getTranslatedField, getTranslatedFields } from "@/lib/translation";
 
 export const dynamic = "force-dynamic";
 
@@ -35,25 +36,48 @@ export default async function EventPage({
 
   if (!event || event.region.slug !== regionSlug) notFound();
 
+  const [{ title, description }, regionName, categoryName] = await Promise.all([
+    getTranslatedFields("event", event.id, event.sourceLocale as Locale, locale, {
+      title: event.title,
+      description: event.description,
+    }),
+    getTranslatedField({
+      entityType: "region",
+      entityId: event.region.id,
+      field: "name",
+      sourceText: event.region.name,
+      sourceLocale: event.region.sourceLocale as Locale,
+      targetLocale: locale,
+    }),
+    getTranslatedField({
+      entityType: "eventCategory",
+      entityId: event.category.id,
+      field: "name",
+      sourceText: event.category.name,
+      sourceLocale: event.category.sourceLocale as Locale,
+      targetLocale: locale,
+    }),
+  ]);
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
       <Link href={`/${regionSlug}${sp.lang ? `?lang=${sp.lang}` : ""}`} className="text-sm font-medium text-sun-600 hover:underline">
-        &larr; {translate(event.region.name, locale)}
+        &larr; {regionName}
       </Link>
 
-      <h1 className="mt-4 text-3xl font-bold text-sea-900">{translate(event.title, locale)}</h1>
+      <h1 className="mt-4 text-3xl font-bold text-sea-900">{title}</h1>
       <p className="mt-2 text-sm text-sea-900/60">
         {formatDateRange(event.startsAt, event.endsAt, locale)}
         {event.venueName ? ` · ${event.venueName}` : ""}
       </p>
       <p className="mt-1 text-xs text-sea-900/50">
-        {translate(event.category.name, locale)}
+        {categoryName}
         {event.organizer ? ` · ${event.organizer.name}` : ""}
         {event.recurrenceRule ? ` · ${event.recurrenceRule}` : ""}
       </p>
 
       <div className="mt-6 rounded-xl border border-sea-100 bg-white p-6 text-sea-900/90">
-        {translate(event.description, locale)}
+        {description}
       </div>
 
       {event.sourceUrl && (
