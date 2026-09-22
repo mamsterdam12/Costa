@@ -362,6 +362,15 @@ export const ui = {
     da: "Oprettet af",
   },
   image: { nl: "Foto", en: "Photo", es: "Foto", de: "Foto", fr: "Photo", sv: "Foto", da: "Foto" },
+  imageSource: {
+    nl: "Fotobron",
+    en: "Photo source",
+    es: "Origen de la foto",
+    de: "Fotoquelle",
+    fr: "Source de la photo",
+    sv: "Fotokälla",
+    da: "Fotokilde",
+  },
   slug: { nl: "Slug", en: "Slug", es: "Slug", de: "Slug", fr: "Slug", sv: "Slug", da: "Slug" },
   empty: { nl: "leeg", en: "empty", es: "vacío", de: "leer", fr: "vide", sv: "tom", da: "tom" },
   noSourcesForScript: {

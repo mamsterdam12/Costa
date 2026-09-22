@@ -5,6 +5,8 @@ import { parseUikitListing } from "./lib/uikitListing";
 import { findFeedUrls, parseFeed } from "./lib/feed";
 import { extractEvents } from "./lib/extract";
 import { parseJetCalendar } from "./lib/jetCalendar";
+import { classifyCost, extractDetails } from "./lib/detail";
+import { atTimeInMarbella } from "./lib/dates";
 import type { PageResult } from "./lib/fetcher";
 import { turismoMarbellaScraper } from "./turismoMarbella";
 import { MARBELLA_TZ, marbellaDay } from "../lib/datetime";
@@ -132,6 +134,37 @@ async function main() {
   check("cell from the neighbouring month ignored", jet.events.some((e) => e.title === "Last Month Party"), false);
   check("entry without a link falls back to the page", jet.events[1]?.sourceUrl, "https://thefarm-marbella.com/whats-on/");
   check("never borrows the next entry's URL", jet.events[1]?.externalId.includes("#"), true);
+
+  console.log("detail page:");
+  const detailPage: PageResult = {
+    requestedUrl: "https://turismo.marbella.es/agenda/carnaval-moraga.html",
+    url: "https://turismo.marbella.es/agenda/carnaval-moraga.html",
+    html: readFileSync(join(__dirname, "lib/fixtures/detail-page.html"), "utf8"),
+    status: 200,
+    contentType: "text/html; charset=utf-8",
+    fromCache: true,
+    fetchedAt: new Date(),
+    ageMs: 0,
+    notes: [],
+  };
+  const details = extractDetails(detailPage, "Carnaval Moraga");
+  check("reads the starting time", details.time, { hour: 20, minute: 0 });
+  check("reads the place", details.venueName, "Boulevard Pablo Ráez");
+  check("reads free admission", [details.costType, details.costAmount], ["FREE", undefined]);
+  check("reads the summary", details.description?.startsWith("XXI Moraga Carnavalesca"), true);
+  check(
+    "takes the poster, not the site logo",
+    details.imageUrl,
+    "https://turismo.marbella.es/images/agenda/2026/moraga-carnavalesca-2026.jpg"
+  );
+  // A listing date is midnight; the detail page is what makes it 20:00.
+  check(
+    "midnight plus the detail time is the real start",
+    atTimeInMarbella(parseDateRange("26 Septiembre 2026")!.start, details.time!).toISOString(),
+    "2026-09-26T18:00:00.000Z"
+  );
+  check("a price in euros is not free", classifyCost("12 € por persona").costType, "PAID");
+  check("no price stated stays unknown", classifyCost("Aforo limitado").costType, "UNKNOWN");
 
   console.log("feed:");
   check("finds the advertised feed", findFeedUrls(html, "https://turismo.marbella.es/agenda.html"), [

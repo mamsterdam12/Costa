@@ -43,6 +43,11 @@ const robotsCache = new Map<string, { rules: RobotsRules; at: number }>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Politeness delay for a request this module isn't making itself. */
+export async function waitForHostTurn(url: string): Promise<void> {
+  await waitForHost(new URL(url).host, null);
+}
+
 async function waitForHost(host: string, crawlDelayMs: number | null) {
   const interval = Math.max(crawlDelayMs ?? 0, MIN_HOST_INTERVAL_MS);
   const last = lastHostRequest.get(host);

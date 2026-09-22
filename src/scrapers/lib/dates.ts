@@ -76,3 +76,35 @@ export function parseDateRange(raw: string): DateRange | null {
   const start = parseOne(text);
   return start ? { start } : null;
 }
+
+// "From 7.30PM", "20:00", "20.00 h", "a las 20:00 h" -> wall-clock time.
+// Listings and detail pages write it every one of these ways.
+export function parseTimeOfDay(text: string): { hour: number; minute: number } | null {
+  const ampm = /(\d{1,2})(?:[.:h](\d{2}))?\s*([ap])\.?\s?m\.?/i.exec(text);
+  if (ampm) {
+    let hour = Number(ampm[1]) % 12;
+    if (ampm[3].toLowerCase() === "p") hour += 12;
+    return { hour, minute: Number(ampm[2] ?? 0) };
+  }
+  const h24 = /\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b/.exec(text);
+  if (h24) return { hour: Number(h24[1]), minute: Number(h24[2]) };
+  // "a las 20 h", "20 h" -- an hour on its own only counts when the page
+  // marks it as one, or every price and house number becomes a time.
+  const bare = /\b([01]?\d|2[0-3])\s*(?:h\b|horas\b|uur\b)/i.exec(text);
+  if (bare) return { hour: Number(bare[1]), minute: 0 };
+  return null;
+}
+
+/** The same instant, moved to a given wall-clock time in Marbella. */
+export function atTimeInMarbella(day: Date, time: { hour: number; minute: number }): Date {
+  const p: Record<string, number> = {};
+  for (const { type, value } of new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(day)) {
+    if (type !== "literal") p[type] = Number(value);
+  }
+  return marbellaTimeToUtc(p.year, p.month, p.day, time.hour, time.minute);
+}

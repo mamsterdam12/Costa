@@ -1,6 +1,7 @@
 import type { ScrapedEvent } from "../types";
 import { absoluteUrl, slugify, stripTags } from "./html";
 import { marbellaTimeToUtc } from "../../lib/datetime";
+import { parseTimeOfDay } from "./dates";
 import { collectHrefs, pickByTitle } from "./links";
 
 // Parser for JetEngine's (Crocoblock) "Listing Calendar" Elementor
@@ -51,19 +52,6 @@ function detectMonthYear(html: string): { month: number; year: number; explicit:
     // wrong dates, so the caller downgrades to DRAFT when that happens.
     explicit: month !== undefined && year !== undefined,
   };
-}
-
-// "From 7.30PM" / "from 7 PM" / "19:30" -> {hour, minute}
-function parseTime(text: string): { hour: number; minute: number } | null {
-  const ampm = /(\d{1,2})(?:[.:h](\d{2}))?\s*([ap])\.?m\.?/i.exec(text);
-  if (ampm) {
-    let hour = Number(ampm[1]) % 12;
-    if (ampm[3].toLowerCase() === "p") hour += 12;
-    return { hour, minute: Number(ampm[2] ?? 0) };
-  }
-  const h24 = /\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/.exec(text);
-  if (h24) return { hour: Number(h24[1]), minute: Number(h24[2]) };
-  return null;
 }
 
 // Without a real DOM the block slices run on into the next element, so a
@@ -128,7 +116,7 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
 
       const title = lines[0];
       const rest = lines.slice(1);
-      const time = parseTime(rest.join(" ")) ?? parseTime(title) ?? { hour: 0, minute: 0 };
+      const time = parseTimeOfDay(rest.join(" ")) ?? parseTimeOfDay(title) ?? { hour: 0, minute: 0 };
       const startsAt = marbellaTimeToUtc(year, month, day, time.hour, time.minute);
       const markup = withoutAssets(block);
       const link = eventHref(markup, title);

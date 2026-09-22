@@ -164,6 +164,7 @@ export default async function EventPage({
         <DetailRow label={ui.status[locale]} value={event.status} {...rowProps} />
         <DetailRow label={ui.sourceLanguage[locale]} value={sourceLanguageLabel} {...rowProps} />
         <DetailRow label={ui.image[locale]} value={event.imageKey} {...rowProps} />
+        <DetailRow label={ui.imageSource[locale]} value={event.imageUrl} {...rowProps} />
         <DetailRow label={ui.source[locale]} value={event.source?.name} {...rowProps} />
         <DetailRow label={ui.eventUrl[locale]} value={event.sourceUrl} {...rowProps} />
         <DetailRow label={ui.scraper[locale]} value={event.sourceName} {...rowProps} />

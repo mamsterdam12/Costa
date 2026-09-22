@@ -6,6 +6,9 @@ import { shortHash, slugify } from "./lib/html";
 import { FetchRefused, fetchPage, type PageResult } from "./lib/fetcher";
 import { extractEvents, type ExtractionResult } from "./lib/extract";
 import { DATE_LIKE, diagnosePage, excerptsAroundPattern } from "./lib/diagnose";
+import { extractDetails } from "./lib/detail";
+import { atTimeInMarbella } from "./lib/dates";
+import { importEventImage } from "../lib/imageImport";
 import { marbellaDay, startOfTodayInMarbella } from "../lib/datetime";
 
 export type RunSummary = {
@@ -55,6 +58,56 @@ function makeSlug(ev: ScrapedEvent): string {
 
 function normalizeTitle(title: string): string {
   return slugify(title).replace(/-/g, "");
+}
+
+// A listing says what is on and roughly when. The hour it starts, where
+// it is, what it costs and the poster are all on the event's own page --
+// which the source does publish, and which we were throwing away by
+// reading only the overview. Detail pages are read through the same
+// snapshot store as everything else, so this costs one request per event
+// the first time and nothing on later runs.
+const MAX_DETAIL_PAGES = 40;
+const DETAIL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function addDetails(
+  events: ScrapedEvent[],
+  listingUrls: Set<string>,
+  summary: RunSummary,
+  force?: boolean
+): Promise<void> {
+  let read = 0;
+  let enriched = 0;
+  for (const ev of events) {
+    if (read >= MAX_DETAIL_PAGES) break;
+    if (!ev.sourceUrl || listingUrls.has(ev.sourceUrl)) continue;
+    // Only ever the source's own site: a listing links out to ticket
+    // shops and social media too, and those aren't ours to crawl.
+    if (![...listingUrls].some((u) => new URL(u).host === new URL(ev.sourceUrl).host)) continue;
+
+    try {
+      const page = await fetchPage(ev.sourceUrl, { maxAgeMs: DETAIL_MAX_AGE_MS, force });
+      read++;
+      const details = extractDetails(page, ev.title);
+      if (details.time) ev.startsAt = atTimeInMarbella(ev.startsAt, details.time);
+      ev.venueName ??= details.venueName;
+      ev.address ??= details.address;
+      if ((ev.costType ?? "UNKNOWN") === "UNKNOWN" && details.costType && details.costType !== "UNKNOWN") {
+        ev.costType = details.costType;
+        ev.costAmount = details.costAmount;
+      }
+      if (details.description && details.description.length > ev.description.length) {
+        ev.description = details.description;
+      }
+      ev.imageUrl ??= details.imageUrl;
+      if (details.found.length) enriched++;
+      else summary.notes.push(`${ev.title}: detail page had nothing we could read`);
+    } catch (err) {
+      summary.notes.push(
+        `${ev.title}: detail page not read (${err instanceof Error ? err.message : err})`
+      );
+    }
+  }
+  if (read) summary.notes.push(`detail pages: ${read} read, ${enriched} added something`);
 }
 
 // Runs the scraper registered for this Source's sourceType and writes
@@ -150,6 +203,8 @@ export async function runScraperForSource(
     return fail(`failed: no events found (${result.notes.join("; ")})`);
   }
 
+  await addDetails(result.events, new Set(pages.map((p) => p.url)), summary, options.force);
+
   const organizer = scraper.organizerSlug
     ? await prisma.organizer.findUnique({ where: { slug: scraper.organizerSlug } })
     : null;
@@ -201,13 +256,28 @@ export async function runScraperForSource(
     // the row keeps its id, its image and its translations, where
     // creating one would leave the old copy behind on the site.
     if (!existing) {
-      const sameMoment = await prisma.event.findMany({
-        where: { sourceId: source.id, startsAt: ev.startsAt },
+      // Matched on the day rather than the instant: reading the detail
+      // page moves an event from midnight to the hour it really starts,
+      // and that must update the row, not create a second one.
+      const sameDay = await prisma.event.findMany({
+        where: {
+          sourceId: source.id,
+          startsAt: {
+            gte: new Date(ev.startsAt.getTime() - 36 * 60 * 60 * 1000),
+            lte: new Date(ev.startsAt.getTime() + 36 * 60 * 60 * 1000),
+          },
+        },
       });
-      const renamed = sameMoment.find((e) => normalizeTitle(e.title) === normalizeTitle(ev.title));
+      const renamed = sameDay.find(
+        (e) =>
+          normalizeTitle(e.title) === normalizeTitle(ev.title) &&
+          marbellaDay(e.startsAt) === marbellaDay(ev.startsAt)
+      );
       if (renamed) {
         existing = renamed;
-        summary.notes.push(`"${ev.title}": re-identified ${renamed.externalId} as ${ev.externalId}`);
+        summary.notes.push(
+          `"${ev.title}": kept the existing row (${renamed.externalId} -> ${ev.externalId})`
+        );
       }
     }
     // A slug is deterministic, so it only differs when the rule that
@@ -220,6 +290,7 @@ export async function runScraperForSource(
             ...data,
             ...(existing.slug === slug ? {} : { slug }),
             ...(existing.externalId === ev.externalId ? {} : { externalId: ev.externalId }),
+            ...(existing.startsAt.getTime() === ev.startsAt.getTime() ? {} : { startsAt: ev.startsAt }),
           },
         })
       : await prisma.event.create({
@@ -247,6 +318,13 @@ export async function runScraperForSource(
         await prisma.event.update({ where: { id: event.id }, data: { duplicateOfId: match.id } });
         summary.duplicates++;
       }
+    }
+
+    // The source's own poster beats anything we could generate, so it is
+    // tried first; generation stays as the fallback for sources that
+    // publish no picture at all.
+    if (ev.imageUrl && !event.imageKey) {
+      await importEventImage(event, ev.imageUrl);
     }
 
     await getOrGenerateEventImageUrl({

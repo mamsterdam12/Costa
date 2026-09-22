@@ -231,6 +231,11 @@ model Event {
   // since Railway buckets have no public URL mode.
   imageKey String?
 
+  // Where imageKey was copied from, when it came from the source rather
+  // than being generated: the event's own poster, as the source
+  // published it. Null means the picture is ours (or there is none).
+  imageUrl String?
+
   region   Region @relation(fields: [regionId], references: [id])
   regionId String
 

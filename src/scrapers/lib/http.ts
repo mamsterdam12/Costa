@@ -49,6 +49,38 @@ export async function rawFetch(
   }
 }
 
+export type BinaryResponse = {
+  url: string;
+  status: number;
+  ok: boolean;
+  contentType: string;
+  bytes: Buffer;
+};
+
+// For the things a page points at rather than the page itself -- an
+// event's poster, say. Same identification as every other request we
+// make; the caller is responsible for the politeness delay.
+export async function fetchBinary(url: string, timeoutMs = 20000): Promise<BinaryResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { "user-agent": USER_AGENT, accept: "image/*,*/*;q=0.8" },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    return {
+      url: res.url || url,
+      status: res.status,
+      ok: res.ok,
+      contentType: (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase(),
+      bytes: res.ok ? Buffer.from(await res.arrayBuffer()) : Buffer.alloc(0),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // A site putting a CAPTCHA in front of us is telling us not to automate
 // it. We identify the challenge so the failure is reported honestly, and
 // deliberately stop there rather than trying to get past it.

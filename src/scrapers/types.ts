@@ -14,6 +14,8 @@ export type ScrapedEvent = {
   sourceUrl: string;
   costType?: "FREE" | "PAID" | "UNKNOWN";
   costAmount?: string;
+  /** The source's own picture of this event, if it publishes one. */
+  imageUrl?: string;
 };
 
 // A scraper is configuration, not machinery: fetching, politeness,
