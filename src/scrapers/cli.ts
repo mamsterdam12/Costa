@@ -34,22 +34,30 @@ async function main() {
 // The per-source summaries say what was read; this says what was kept,
 // which is the thing worth checking after a change to the parsers.
 async function reportStoredEvents() {
+  // Exactly what a visitor would see: published, not a flagged
+  // duplicate, still to come. An archived row counted here would make
+  // the report disagree with the site.
+  const visible = {
+    startsAt: { gte: new Date() },
+    status: "PUBLISHED" as const,
+    duplicateOfId: null,
+  };
   const events = await prisma.event.findMany({
-    where: { startsAt: { gte: new Date() } },
+    where: visible,
     orderBy: { startsAt: "asc" },
     take: 5,
   });
-  const total = await prisma.event.count({ where: { startsAt: { gte: new Date() } } });
+  const total = await prisma.event.count({ where: visible });
   const missing = {
-    time: await prisma.event.count({ where: { startsAt: { gte: new Date() }, startTimeKnown: false } }),
-    venue: await prisma.event.count({ where: { startsAt: { gte: new Date() }, venueName: null } }),
-    address: await prisma.event.count({ where: { startsAt: { gte: new Date() }, address: null } }),
-    cost: await prisma.event.count({ where: { startsAt: { gte: new Date() }, costType: "UNKNOWN" } }),
-    image: await prisma.event.count({ where: { startsAt: { gte: new Date() }, imageKey: null } }),
-    url: await prisma.event.count({ where: { startsAt: { gte: new Date() }, sourceUrl: null } }),
+    time: await prisma.event.count({ where: { ...visible, startTimeKnown: false } }),
+    venue: await prisma.event.count({ where: { ...visible, venueName: null } }),
+    address: await prisma.event.count({ where: { ...visible, address: null } }),
+    cost: await prisma.event.count({ where: { ...visible, costType: "UNKNOWN" } }),
+    image: await prisma.event.count({ where: { ...visible, imageKey: null } }),
+    url: await prisma.event.count({ where: { ...visible, sourceUrl: null } }),
   };
 
-  console.log(`[stored] ${total} upcoming event(s)`);
+  console.log(`[stored] ${total} upcoming event(s) a visitor can see`);
   console.log(
     `[stored] without: ${missing.time} a time, ${missing.venue} a venue, ${missing.address} an address, ` +
       `${missing.cost} a price, ${missing.image} a picture, ${missing.url} their own URL`
