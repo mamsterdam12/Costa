@@ -3,6 +3,8 @@ import type { PageResult } from "./fetcher";
 import { fetchPage } from "./fetcher";
 import { extractJsonLdEvents } from "./jsonld";
 import { parseJetCalendar } from "./jetCalendar";
+import { findFeedUrls, parseFeed } from "./feed";
+import { parseUikitListing } from "./uikitListing";
 import { absoluteUrl, stripTags } from "./html";
 
 // The shared ladder every scraper gets, most structured first. Each tier
@@ -33,7 +35,27 @@ export async function extractEvents(page: PageResult, scraper: Scraper): Promise
   notes.push(`${label}: ${jsonLd.length} JSON-LD event(s)`);
   if (jsonLd.length) return { events: jsonLd, strategy: "json-ld", confidence: "high", notes };
 
-  // 2. The Events Calendar REST API -- only if the page shows the plugin
+  // 2. YOOtheme Pro listings (el-meta / el-title / el-content), which
+  //     carry no <time>, no JSON-LD and no event-ish class names.
+  if (/\bel-title\b/i.test(page.html) && /\bel-meta\b/i.test(page.html)) {
+    const listing = parseUikitListing(page.html, page.url);
+    notes.push(
+      `${label}: yootheme listing, ${listing.events.length} event(s)` +
+        (listing.undated ? `, ${listing.undated} without a readable date` : "") +
+        (listing.unlinked ? `, ${listing.unlinked} without their own URL` : "") +
+        (listing.events[0] ? `, first: "${listing.events[0].title}" -> ${listing.events[0].sourceUrl}` : "") +
+        // When nothing links, show what the page did offer -- that is
+        // what a next pass needs in order to fix the matching.
+        (listing.unlinked && listing.linkCandidates.length
+          ? `, links near the first entry: ${listing.linkCandidates.join(" ")}`
+          : "")
+    );
+    if (listing.events.length) {
+      return { events: dedupe(listing.events), strategy: "yootheme-listing", confidence: "high", notes };
+    }
+  }
+
+  // 3. The Events Calendar REST API -- only if the page shows the plugin
   //    is installed, otherwise this is a wasted request against the host.
   if (/tribe-events|tribe_events|\/wp-json\/tribe/i.test(page.html)) {
     try {
@@ -49,7 +71,25 @@ export async function extractEvents(page: PageResult, scraper: Scraper): Promise
     }
   }
 
-  // 3. JetEngine (Crocoblock) listing calendar: a month grid whose dates
+  // 4. An RSS/Atom feed, when the page advertises one: smaller than the
+  //     page, stable across redesigns, and it carries each item's own URL.
+  for (const feedUrl of findFeedUrls(page.html, page.url).slice(0, 2)) {
+    try {
+      const feed = await fetchPage(feedUrl, { maxAgeMs: 60 * 60 * 1000 });
+      const parsed = parseFeed(feed.html, feed.url);
+      notes.push(
+        `feed ${new URL(feedUrl).pathname}${new URL(feedUrl).search}: ${parsed.items} item(s), ` +
+          `${parsed.events.length} dated${parsed.undated ? `, ${parsed.undated} without a usable date` : ""}`
+      );
+      if (parsed.events.length) {
+        return { events: dedupe(parsed.events), strategy: "feed", confidence: "high", notes };
+      }
+    } catch (err) {
+      notes.push(`feed ${feedUrl}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  // 5. JetEngine (Crocoblock) listing calendar: a month grid whose dates
   //    live in the caption, not in the entries.
   if (/jet-calendar/i.test(page.html)) {
     const cal = parseJetCalendar(page.html, page.url);
@@ -68,7 +108,7 @@ export async function extractEvents(page: PageResult, scraper: Scraper): Promise
     }
   }
 
-  // 4. Last resort: <time datetime> next to a heading. Never trusted
+  // 6. Last resort: <time datetime> next to a heading. Never trusted
   //    enough to publish unreviewed.
   const guessed = dedupe(heuristicEvents(page.html, page.url));
   notes.push(`${label}: ${guessed.length} heuristic event(s)`);

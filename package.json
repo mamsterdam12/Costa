@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "scrape": "tsx src/scrapers/cli.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:scrapers": "tsx src/scrapers/selftest.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
