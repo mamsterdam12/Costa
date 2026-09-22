@@ -96,6 +96,27 @@ export function excerptAroundPattern(
 export const DATE_LIKE =
   /\b\d{1,2}\s*(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic|jan|apr|aug|dec|maart|mei|okt)[a-z]*\.?\s*\d{0,4}|\b\d{4}-\d{2}-\d{2}\b/i;
 
+// One excerpt tells you what an entry looks like; three tell you where
+// one stops and the next starts, which is the thing a parser needs.
+export function excerptsAroundPattern(
+  html: string,
+  label: string,
+  pattern: RegExp,
+  count = 3,
+  chars = 900,
+  before = 500
+): string[] {
+  const re = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+  const lines: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) && lines.length < count) {
+    const from = Math.max(0, m.index - before);
+    lines.push(`[diagnose] ${label} #${lines.length + 1} @${m.index}: ${JSON.stringify(html.slice(from, from + chars))}`);
+    re.lastIndex = m.index + Math.max(chars - before, 1);
+  }
+  return lines.length ? lines : [`[diagnose] ${label}: no match`];
+}
+
 function host(src: string): string {
   try {
     return new URL(src, "https://x.invalid").hostname.replace(/^x\.invalid$/, "(same site)");

@@ -5,7 +5,7 @@ import type { ScrapedEvent } from "./types";
 import { shortHash, slugify } from "./lib/html";
 import { FetchRefused, fetchPage, type PageResult } from "./lib/fetcher";
 import { extractEvents, type ExtractionResult } from "./lib/extract";
-import { DATE_LIKE, diagnosePage, excerptAroundPattern } from "./lib/diagnose";
+import { DATE_LIKE, diagnosePage, excerptsAroundPattern } from "./lib/diagnose";
 import { startOfTodayInMarbella } from "../lib/datetime";
 
 export type RunSummary = {
@@ -144,9 +144,9 @@ export async function runScraperForSource(
         console.log(line);
       }
       // Where the listing keeps its dates and links, when class names
-      // gave nothing away.
-      for (const line of excerptAroundPattern(page.html, "first heading", /<h[23]\b/i)) console.log(line);
-      for (const line of excerptAroundPattern(page.html, "first date", DATE_LIKE)) console.log(line);
+      // gave nothing away. Three samples, so the repeating wrapper --
+      // the thing a parser keys on -- is visible rather than guessed.
+      for (const line of excerptsAroundPattern(page.html, "date", DATE_LIKE)) console.log(line);
     }
     return fail(`failed: no events found (${result.notes.join("; ")})`);
   }
