@@ -5,7 +5,7 @@ import type { ScrapedEvent } from "./types";
 import { shortHash, slugify } from "./lib/html";
 import { FetchRefused, fetchPage, type PageResult } from "./lib/fetcher";
 import { extractEvents, type ExtractionResult } from "./lib/extract";
-import { diagnosePage, excerptAround } from "./lib/diagnose";
+import { DATE_LIKE, diagnosePage, excerptAroundPattern } from "./lib/diagnose";
 import { startOfTodayInMarbella } from "../lib/datetime";
 
 export type RunSummary = {
@@ -143,7 +143,10 @@ export async function runScraperForSource(
       })) {
         console.log(line);
       }
-      for (const line of excerptAround(page.html, "jet-calendar-week__day-event", 900)) console.log(line);
+      // Where the listing keeps its dates and links, when class names
+      // gave nothing away.
+      for (const line of excerptAroundPattern(page.html, "first heading", /<h[23]\b/i)) console.log(line);
+      for (const line of excerptAroundPattern(page.html, "first date", DATE_LIKE)) console.log(line);
     }
     return fail(`failed: no events found (${result.notes.join("; ")})`);
   }

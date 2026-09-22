@@ -37,6 +37,14 @@ export function diagnosePage(
   const iframes = grab(/<iframe[^>]*src=["']([^"']+)["']/gi, 20);
   lines.push(`[diagnose] iframes: ${iframes.join(", ") || "none"}`);
 
+  // A feed is almost always a better thing to read than the page it
+  // belongs to: structured, small, and stable across redesigns.
+  const feeds = (html.match(/<link\b[^>]*rel=["']alternate["'][^>]*>/gi) ?? [])
+    .filter((t) => /rss|atom|xml|feed/i.test(t))
+    .map((t) => /href=["']([^"']+)["']/i.exec(t)?.[1])
+    .filter(Boolean);
+  lines.push(`[diagnose] feeds: ${feeds.join(", ") || "none"}`);
+
   const headings = grab(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi, 40).map((h) => stripTags(h)).filter(Boolean);
   lines.push(`[diagnose] headings: ${headings.join(" | ") || "none"}`);
 
@@ -66,6 +74,27 @@ export function excerptAround(html: string, marker: string, chars = 800): string
   const from = Math.max(0, at - 200);
   return [`[diagnose] "${marker}" @${at}: ${JSON.stringify(html.slice(from, from + chars))}`];
 }
+
+// Same, but anchored on a pattern rather than a literal -- for finding
+// where a listing actually keeps its dates and links when the class
+// names give nothing away.
+export function excerptAroundPattern(
+  html: string,
+  label: string,
+  pattern: RegExp,
+  chars = 1200,
+  before = 400
+): string[] {
+  const m = pattern.exec(html);
+  if (!m) return [`[diagnose] ${label}: no match`];
+  const from = Math.max(0, m.index - before);
+  return [`[diagnose] ${label} @${m.index}: ${JSON.stringify(html.slice(from, from + chars))}`];
+}
+
+// Dates as a listing writes them for people: "26 Sep 2026", "26 de
+// septiembre", "2026-09-26".
+export const DATE_LIKE =
+  /\b\d{1,2}\s*(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic|jan|apr|aug|dec|maart|mei|okt)[a-z]*\.?\s*\d{0,4}|\b\d{4}-\d{2}-\d{2}\b/i;
 
 function host(src: string): string {
   try {
