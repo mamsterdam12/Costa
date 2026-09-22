@@ -71,11 +71,21 @@ function parseTime(text: string): { hour: number; minute: number } | null {
 // event. Two ways to be sure it doesn't: a URL echoing this event's own
 // title, from anywhere in the block, or the very first link in it.
 function eventHref(block: string, title: string): { href: string | null; candidates: string[] } {
-  const candidates = collectHrefs(block.slice(0, 1200));
+  const candidates = collectHrefs(block.slice(0, 2500));
   const byTitle = pickByTitle(candidates, title);
   if (byTitle) return { href: byTitle, candidates };
-  const near = collectHrefs(block.slice(0, 400));
+  const near = collectHrefs(block.slice(0, 600));
   return { href: near[0] ?? null, candidates };
+}
+
+// Elementor ships a per-entry <style> block ahead of the entry's own
+// markup -- thousands of characters of generated CSS. Left in, it fills
+// any window big enough to hold the entry and hides the link that comes
+// after it, which is why The Farm's events all pointed at the listing.
+function withoutAssets(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "");
 }
 
 export type JetCalendarResult = {
@@ -120,10 +130,11 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
       const rest = lines.slice(1);
       const time = parseTime(rest.join(" ")) ?? parseTime(title) ?? { hour: 0, minute: 0 };
       const startsAt = marbellaTimeToUtc(year, month, day, time.hour, time.minute);
-      const link = eventHref(block, title);
+      const markup = withoutAssets(block);
+      const link = eventHref(markup, title);
       const href = link.href ? absoluteUrl(link.href, pageUrl) : null;
       if (!linkCandidates.length) linkCandidates = link.candidates.slice(0, 6);
-      if (!entrySample) entrySample = block.slice(0, 700);
+      if (!entrySample) entrySample = markup.slice(0, 700);
       const dayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       events.push({
         externalId: href ?? `${pageUrl}#${slugify(title)}-${dayKey}`,
