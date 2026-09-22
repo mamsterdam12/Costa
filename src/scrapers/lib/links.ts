@@ -1,4 +1,4 @@
-import { slugify } from "./html";
+import { decodeEntities, slugify } from "./html";
 
 // Picking an entry's own URL out of a listing. Themes disagree about
 // where the link sits -- wrapped around the card, on the title, in a
@@ -20,9 +20,14 @@ export function distinctiveWords(text: string): string[] {
     .filter((w) => w.length >= 4 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
 }
 
+// Not every listing puts the URL in an href: JetEngine's overlay wrapper
+// carries it as data-url, which is how The Farm's events looked linkless
+// while every one of them had a page. The value arrives HTML-encoded
+// (&#038; for &), so it is decoded before anything else looks at it --
+// otherwise the query string is cut at the entity's own "#".
 export function collectHrefs(slice: string, into: string[] = []): string[] {
-  for (const m of slice.matchAll(/href=["']([^"'#]+)["']/gi)) {
-    const href = m[1].trim();
+  for (const m of slice.matchAll(/(?:href|data-url)=["']([^"']+)["']/gi)) {
+    const href = decodeEntities(m[1]).trim().split("#")[0];
     if (!href || /^(javascript|mailto|tel):/i.test(href)) continue;
     if (!into.includes(href)) into.push(href);
   }

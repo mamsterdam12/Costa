@@ -191,16 +191,36 @@ export async function runScraperForSource(
       lastSeenAt: now,
     };
 
-    const existing = await prisma.event.findUnique({
+    let existing = await prisma.event.findUnique({
       where: { sourceName_externalId_startsAt: key },
     });
+    // An externalId is whatever identified the event last time -- a
+    // detail URL once we can read one, the listing page plus a title
+    // before that. When it changes, the same event is still the same
+    // event: the source, the moment and the title all agree. Re-using
+    // the row keeps its id, its image and its translations, where
+    // creating one would leave the old copy behind on the site.
+    if (!existing) {
+      const sameMoment = await prisma.event.findMany({
+        where: { sourceId: source.id, startsAt: ev.startsAt },
+      });
+      const renamed = sameMoment.find((e) => normalizeTitle(e.title) === normalizeTitle(ev.title));
+      if (renamed) {
+        existing = renamed;
+        summary.notes.push(`"${ev.title}": re-identified ${renamed.externalId} as ${ev.externalId}`);
+      }
+    }
     // A slug is deterministic, so it only differs when the rule that
     // builds it changed -- then the stored one is the stale one.
     const slug = makeSlug(ev);
     const event = existing
       ? await prisma.event.update({
           where: { id: existing.id },
-          data: existing.slug === slug ? data : { ...data, slug },
+          data: {
+            ...data,
+            ...(existing.slug === slug ? {} : { slug }),
+            ...(existing.externalId === ev.externalId ? {} : { externalId: ev.externalId }),
+          },
         })
       : await prisma.event.create({
           data: { ...data, ...key, slug, regionId: source.regionId, status },

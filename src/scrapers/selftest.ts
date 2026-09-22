@@ -122,7 +122,12 @@ async function main() {
   );
   check("month and year read, not guessed", [jet.label, jet.datesExplicit], ["2026-10", true]);
   check("one row per event, overlay copy dropped", jet.events.length, 2);
-  check("entry keeps its own URL", jet.events[0]?.sourceUrl, "https://thefarm-marbella.com/whats-on/flamenco-night/");
+  // JetEngine hides the URL in the overlay's data-url, entity-encoded.
+  check(
+    "entry keeps its own URL, whole and decoded",
+    jet.events[0]?.sourceUrl,
+    "https://thefarm-marbella.com/whats-on/flamenco-night/?date=2026-10-13&unix=1791000000"
+  );
   check("evening time in Marbella", jet.events[0]?.startsAt.toISOString(), "2026-10-13T18:30:00.000Z");
   check("cell from the neighbouring month ignored", jet.events.some((e) => e.title === "Last Month Party"), false);
   check("entry without a link falls back to the page", jet.events[1]?.sourceUrl, "https://thefarm-marbella.com/whats-on/");
