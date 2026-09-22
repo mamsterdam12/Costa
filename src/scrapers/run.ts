@@ -80,6 +80,7 @@ async function addDetails(
   // A host that refuses one detail page refuses all of them; asking
   // twenty more times is both pointless and rude.
   const refusing = new Set<string>();
+  const noTime: string[] = [];
   for (const ev of events) {
     if (read >= MAX_DETAIL_PAGES) break;
     if (ev.sourceUrl && refusing.has(new URL(ev.sourceUrl).host)) continue;
@@ -111,7 +112,12 @@ async function addDetails(
       if (details.costType && details.costType !== "UNKNOWN") gained.price++;
       if (details.description) gained.text++;
       if (details.imageUrls.length) gained.image++;
+      if (!details.time) noTime.push(ev.title);
       if (read <= 2) summary.notes.push(`"${ev.title}" detail: ${details.found.join(", ") || "nothing"}`);
+      if (!details.time && noTime.length <= 3) {
+        const labels = details.found.find((f) => f.startsWith("labels:"));
+        if (labels) summary.notes.push(`"${ev.title}" has no hour -- ${labels}`);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof FetchRefused) {
@@ -121,6 +127,9 @@ async function addDetails(
         summary.notes.push(`${ev.title}: detail page not read (${message})`);
       }
     }
+  }
+  if (noTime.length) {
+    summary.notes.push(`no hour stated on ${noTime.length}: ${noTime.slice(0, 12).join(" | ")}`);
   }
   if (read) {
     summary.notes.push(
