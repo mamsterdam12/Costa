@@ -6,7 +6,9 @@ import { runScraperForSource } from "./run";
 //   npm run scrape            -> every active EVENTS source with a scraper
 //   npm run scrape -- the-farm -> only sources with that sourceType
 async function main() {
-  const only = process.argv[2];
+  const args = process.argv.slice(2);
+  const force = args.includes("--force");
+  const only = args.find((a) => !a.startsWith("--"));
   const sourceTypes = only ? [only] : scrapers.map((s) => s.sourceType);
 
   const sources = await prisma.source.findMany({
@@ -19,7 +21,7 @@ async function main() {
   }
 
   for (const source of sources) {
-    const summary = await runScraperForSource(source.id);
+    const summary = await runScraperForSource(source.id, { force });
     console.log(`[scrape] ${summary.sourceName}: ${summary.status}`);
     for (const note of summary.notes) console.log(`         - ${note}`);
   }

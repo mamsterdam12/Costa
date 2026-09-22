@@ -169,6 +169,35 @@ model Source {
   updatedAt DateTime @updatedAt
 }
 
+// The last copy of a page we successfully fetched, so scraping does not
+// mean hitting the origin again for every parse. Three jobs:
+//  - re-running a scraper (or fixing its parser) costs no request at all;
+//  - a source that refuses us -- SiteGround challenges Railway's egress
+//    IPs on sight -- degrades to "working from the copy of <date>"
+//    instead of yielding nothing;
+//  - conditional requests (etag/last-modified) let the origin answer 304
+//    and send no body when nothing changed.
+model PageSnapshot {
+  id       String @id @default(cuid())
+  url      String @unique // the URL we requested
+  finalUrl String // where we ended up after redirects
+  status   Int
+
+  contentType  String  @default("")
+  body         String // raw response text
+  bytes        Int     @default(0)
+  etag         String?
+  lastModified String?
+
+  fetchedAt     DateTime  @default(now()) // when `body` was last confirmed current
+  lastAttemptAt DateTime  @default(now())
+  lastError     String? // why the most recent attempt failed, if it did
+  blockedAt     DateTime? // last time the origin served a bot challenge
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // One visible occurrence of an event. `recurrenceRule` is descriptive
 // metadata for now (e.g. "WEEKLY;BYDAY=SU") describing how it repeats;
 // splitting this into full Organizer/EventSeries/EventInstance objects

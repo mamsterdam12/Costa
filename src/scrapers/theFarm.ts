@@ -1,25 +1,14 @@
-import type { ScrapedEvent, Scraper, ScrapeResult } from "./types";
-import { fetchJson, fetchPage, type FetchedPage } from "./lib/http";
-import { extractJsonLdEvents } from "./lib/jsonld";
-import { absoluteUrl, stripTags } from "./lib/html";
-import { diagnosePage, excerptAround } from "./lib/diagnose";
-import { parseJetCalendar } from "./lib/jetCalendar";
+import type { Scraper } from "./types";
 
-// The Farm Marbella (thefarm-marbella.com): a WordPress site with a
-// "What's On" page plus an /upcoming-events/ calendar. The site couldn't
-// be inspected from the development sandbox (its domain is blocked
-// there), so rather than hard-coding one HTML layout this tries, in
-// order of reliability:
-//   1. schema.org Event JSON-LD on the listing pages (what most WP event
-//      calendars emit) -- structured, trusted, published directly;
-//   2. The Events Calendar's REST API, if that plugin is what runs the
-//      calendar -- also structured and trusted;
-//   3. a conservative HTML heuristic (<time datetime> next to a heading)
-//      -- low confidence, so its results come in as DRAFT and the
-//      Source is flagged for review.
-// If all three find nothing, the run reports that and the Source is
-// flagged, per the design: a failing script is marked for a person or
-// an AI agent to look at, it doesn't guess.
+// The Farm Marbella (thefarm-marbella.com): WordPress + Elementor with a
+// JetEngine month calendar -- no JSON-LD, no events plugin, no <time>
+// elements, so the shared ladder's jet-calendar tier is what reads it.
+// Nothing source-specific is needed beyond the venue details the calendar
+// entries leave out ("Flamenco / Dinner Show / From 7.30PM" and no more).
+//
+// The host (SiteGround) challenges Railway's egress IPs on sight, so runs
+// are often served from the stored snapshot rather than a live fetch;
+// that's handled in lib/fetcher.ts, not here.
 export const theFarmScraper: Scraper = {
   sourceType: "the-farm",
   name: "The Farm Marbella",
@@ -27,192 +16,7 @@ export const theFarmScraper: Scraper = {
     "What's On / upcoming events at The Farm, Marbella old town. Reads their JetEngine month calendar; falls back to JSON-LD and the WP events API if the site ever changes.",
   sourceLocale: "en",
   defaultCategorySlug: "muziek-uitgaan",
-  // The calendar entries are just "Flamenco / Dinner Show / From 7.30PM"
-  // -- the venue is implied by the site, so fill it in here.
   venueName: "The Farm Marbella",
   address: "Pl. Altamirano 3, 29601 Marbella, Málaga",
   organizerSlug: "the-farm-marbella",
-
-  async run(source) {
-    const notes: string[] = [];
-    const origin = new URL(source.url).origin;
-    // /upcoming-events/ redirects to /whats-on/ and serves byte-identical
-    // HTML, so fetching both just doubled our request rate against a host
-    // that rate-limits -- one page is the whole calendar.
-    const pages = [source.url];
-
-    // 1. JSON-LD
-    const jsonLd: ScrapedEvent[] = [];
-    const fetched = new Map<string, FetchedPage>();
-    for (const page of pages) {
-      try {
-        const res = await fetchPage(page);
-        fetched.set(page, res);
-        if (res.challenge) {
-          notes.push(`${page}: blocked -- ${res.challenge}`);
-          continue;
-        }
-        // Resolve against the final URL: a redirect may have moved us.
-        const found = extractJsonLdEvents(res.html, res.url);
-        notes.push(
-          `${page}: ${res.html.length} chars, ${found.length} JSON-LD event(s)` +
-            (res.hops ? ` (after ${res.hops} meta-refresh hop(s) to ${res.url})` : "")
-        );
-        jsonLd.push(...found);
-      } catch (err) {
-        notes.push(`${page}: fetch failed (${err instanceof Error ? err.message : err})`);
-      }
-    }
-    if (jsonLd.length > 0) {
-      return { events: dedupe(jsonLd), strategy: "json-ld", confidence: "high", notes };
-    }
-
-    // 2. The Events Calendar REST API
-    try {
-      const api = `${origin}/wp-json/tribe/events/v1/events?per_page=50`;
-      const data = await fetchJson<TribeResponse>(api);
-      const events = (data.events ?? []).map((e) => tribeToEvent(e, origin)).filter(isEvent);
-      notes.push(`tribe REST API: ${events.length} event(s)`);
-      if (events.length > 0) {
-        return { events, strategy: "tribe-rest-api", confidence: "high", notes };
-      }
-    } catch (err) {
-      notes.push(`tribe REST API: unavailable (${err instanceof Error ? err.message : err})`);
-    }
-
-    // 3. JetEngine listing calendar (what this site actually uses)
-    for (const [page, res] of fetched) {
-      const cal = parseJetCalendar(res.html, res.url);
-      notes.push(
-        `${page}: jet-calendar ${cal.label}, ${cal.events.length} event(s)` +
-          (cal.events[0] ? `, first: "${cal.events[0].title}" -> ${cal.events[0].sourceUrl}` : "")
-      );
-      if (cal.events.length > 0) {
-        return {
-          events: dedupe(cal.events),
-          strategy: "jet-calendar",
-          confidence: cal.datesExplicit ? "high" : "low",
-          notes,
-        };
-      }
-    }
-
-    // 4. HTML heuristic
-    for (const [page, res] of fetched) {
-      const events = heuristicEvents(res.html, res.url);
-      notes.push(`${page}: ${events.length} heuristic event(s)`);
-      if (events.length > 0) {
-        return { events, strategy: "html-heuristic", confidence: "low", notes };
-      }
-    }
-
-    const blocked = [...fetched.values()].find((r) => r.challenge)?.challenge;
-    if (blocked && [...fetched.values()].every((r) => r.challenge)) {
-      return {
-        events: [],
-        strategy: "blocked",
-        confidence: "low",
-        notes,
-        blockedReason: blocked,
-        diagnostics: [...fetched].flatMap(([page, res]) =>
-          diagnosePage(res.url, res.html, {
-            requestedUrl: page,
-            status: res.status,
-            contentType: res.contentType,
-            hops: res.hops,
-          })
-        ),
-      };
-    }
-
-    const diagnostics = [...fetched].flatMap(([page, res]) => [
-      ...diagnosePage(res.url, res.html, {
-        requestedUrl: page,
-        status: res.status,
-        contentType: res.contentType,
-        hops: res.hops,
-      }),
-      // If the calendar is there but didn't parse, the exact markup is
-      // the only thing that helps -- class names alone weren't enough.
-      ...excerptAround(res.html, "jet-calendar-caption", 700),
-      ...excerptAround(res.html, "jet-calendar-week__day-event", 900),
-    ]);
-    return { events: [], strategy: "none", confidence: "low", notes, diagnostics };
-  },
 };
-
-type TribeEvent = {
-  id: number;
-  title?: string;
-  description?: string;
-  url?: string;
-  start_date?: string;
-  end_date?: string;
-  cost?: string;
-  venue?: { venue?: string; address?: string; city?: string };
-};
-type TribeResponse = { events?: TribeEvent[] };
-
-function tribeToEvent(e: TribeEvent, origin: string): ScrapedEvent | null {
-  const startsAt = e.start_date ? new Date(e.start_date.replace(" ", "T")) : undefined;
-  const title = e.title ? stripTags(e.title) : "";
-  if (!startsAt || isNaN(startsAt.getTime()) || !title) return null;
-  const sourceUrl = e.url ? absoluteUrl(e.url, origin) : `${origin}/?p=${e.id}`;
-  const endsAt = e.end_date ? new Date(e.end_date.replace(" ", "T")) : undefined;
-  const cost = e.cost?.trim();
-  return {
-    externalId: String(e.id),
-    title,
-    description: stripTags(e.description ?? ""),
-    startsAt,
-    endsAt: endsAt && !isNaN(endsAt.getTime()) ? endsAt : undefined,
-    venueName: e.venue?.venue,
-    address: [e.venue?.address, e.venue?.city].filter(Boolean).join(", ") || undefined,
-    sourceUrl,
-    costType: !cost ? "UNKNOWN" : /free|gratis/i.test(cost) || cost === "0" ? "FREE" : "PAID",
-    costAmount: cost && !/free|gratis/i.test(cost) && cost !== "0" ? cost : undefined,
-  };
-}
-
-function isEvent(e: ScrapedEvent | null): e is ScrapedEvent {
-  return e !== null;
-}
-
-// Looks for <time datetime="..."> and pairs each with the nearest heading
-// before it and the nearest link around it. Deliberately simple: it only
-// has to be good enough to surface *something* for a person to review.
-function heuristicEvents(html: string, pageUrl: string): ScrapedEvent[] {
-  const events: ScrapedEvent[] = [];
-  const timeRe = /<time[^>]*datetime=["']([^"']+)["'][^>]*>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = timeRe.exec(html))) {
-    const startsAt = new Date(m[1]);
-    if (isNaN(startsAt.getTime())) continue;
-    const before = html.slice(Math.max(0, m.index - 2500), m.index);
-    const headings = [...before.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi)];
-    const title = headings.length ? stripTags(headings[headings.length - 1][1]) : "";
-    if (!title) continue;
-    const links = [...before.matchAll(/<a[^>]*href=["']([^"']+)["']/gi)];
-    const href = links.length ? links[links.length - 1][1] : pageUrl;
-    const sourceUrl = absoluteUrl(href, pageUrl);
-    events.push({
-      externalId: sourceUrl === pageUrl ? `${pageUrl}#${title}` : sourceUrl,
-      title,
-      description: "",
-      startsAt,
-      sourceUrl,
-      costType: "UNKNOWN",
-    });
-  }
-  return dedupe(events);
-}
-
-function dedupe(events: ScrapedEvent[]): ScrapedEvent[] {
-  const seen = new Set<string>();
-  return events.filter((e) => {
-    const key = `${e.externalId}|${e.startsAt.toISOString()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}

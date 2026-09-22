@@ -24,6 +24,12 @@ export default async function ScriptsPage({
     orderBy: { name: "asc" },
   });
 
+  // Which pages we already hold, so a run costs no request at all.
+  const snapshots = await prisma.pageSnapshot.findMany({
+    where: { url: { in: sources.map((s) => s.url) } },
+  });
+  const snapshotByUrl = new Map(snapshots.map((s) => [s.url, s]));
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-3xl font-bold text-sea-900">{ui.scripts[locale]}</h1>
@@ -63,15 +69,36 @@ export default async function ScriptsPage({
                             </>
                           )}
                         </div>
+                        {(() => {
+                          const snap = snapshotByUrl.get(s.url);
+                          if (!snap) return null;
+                          return (
+                            <div className="mt-0.5 text-xs text-sea-900/40">
+                              {ui.storedCopy[locale]}: {Math.round(snap.bytes / 1024)} kB ·{" "}
+                              {formatStamp(snap.fetchedAt, locale)}
+                              {snap.lastError && ` · ${snap.lastError}`}
+                            </div>
+                          );
+                        })()}
                       </div>
-                      <form action={runScraper.bind(null, s.id)}>
-                        <button
-                          type="submit"
-                          className="rounded-full bg-sea-600 px-4 py-1.5 text-sm font-medium text-white"
-                        >
-                          {ui.run[locale]}
-                        </button>
-                      </form>
+                      <div className="flex shrink-0 gap-2">
+                        <form action={runScraper.bind(null, s.id, false)}>
+                          <button
+                            type="submit"
+                            className="rounded-full bg-sea-600 px-4 py-1.5 text-sm font-medium text-white"
+                          >
+                            {ui.run[locale]}
+                          </button>
+                        </form>
+                        <form action={runScraper.bind(null, s.id, true)}>
+                          <button
+                            type="submit"
+                            className="rounded-full border border-sea-100 bg-white px-4 py-1.5 text-sm font-medium text-sea-600"
+                          >
+                            {ui.refetch[locale]}
+                          </button>
+                        </form>
+                      </div>
                     </li>
                   ))}
                 </ul>

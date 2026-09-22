@@ -3,6 +3,9 @@ import { getOrGenerateEventImageUrl } from "../lib/imageGeneration";
 import { getScraper } from "./registry";
 import type { ScrapedEvent } from "./types";
 import { shortHash, slugify } from "./lib/html";
+import { FetchRefused, fetchPage, type PageResult } from "./lib/fetcher";
+import { extractEvents, type ExtractionResult } from "./lib/extract";
+import { diagnosePage, excerptAround } from "./lib/diagnose";
 
 export type RunSummary = {
   sourceId: string;
@@ -14,6 +17,16 @@ export type RunSummary = {
   updated: number;
   duplicates: number;
   notes: string[];
+  /** No page was fetched live; everything came from stored snapshots. */
+  fromCache?: boolean;
+  /** Set when a live fetch was refused and a stored copy stood in. */
+  degraded?: string;
+  snapshotAgeMs?: number;
+};
+
+export type RunOptions = {
+  /** Skip the snapshot and go to the origin (the "refresh" button). */
+  force?: boolean;
 };
 
 // Deterministic category assignment, first rule that matches wins; the
@@ -49,7 +62,10 @@ function normalizeTitle(title: string): string {
 // images are generated at ingestion, here, never on page render. The
 // Source's lastScrapedAt/lastScrapeStatus/needsReview are updated either
 // way so /dashboard and /scripts show what happened.
-export async function runScraperForSource(sourceId: string): Promise<RunSummary> {
+export async function runScraperForSource(
+  sourceId: string,
+  options: RunOptions = {}
+): Promise<RunSummary> {
   const source = await prisma.source.findUnique({ where: { id: sourceId } });
   if (!source) throw new Error(`Source ${sourceId} not found`);
 
@@ -78,21 +94,52 @@ export async function runScraperForSource(sourceId: string): Promise<RunSummary>
   if (source.purpose !== "EVENTS") return fail("failed: not an EVENTS source");
   if (!source.regionId) return fail("failed: source has no region");
 
-  let result;
-  try {
-    result = await scraper.run({ url: source.url });
-  } catch (err) {
-    return fail(`failed: ${err instanceof Error ? err.message : String(err)}`);
+  // Read every page the scraper needs, then run the shared extraction
+  // ladder over each. Both steps prefer a stored snapshot over touching
+  // the origin (lib/fetcher.ts), so re-running is nearly free and a site
+  // that refuses us degrades to its last known copy instead of nothing.
+  const urls = [source.url, ...(scraper.extraPaths ?? []).map((p) => new URL(p, source.url).toString())];
+  const pages: PageResult[] = [];
+  for (const url of urls) {
+    try {
+      const page = await fetchPage(url, { force: options.force });
+      summary.notes.push(...page.notes.map((n) => `${new URL(url).pathname}: ${n}`));
+      if (page.degraded) summary.degraded = page.degraded;
+      summary.fromCache = summary.fromCache || page.fromCache;
+      summary.snapshotAgeMs = Math.max(summary.snapshotAgeMs ?? 0, page.ageMs);
+      pages.push(page);
+    } catch (err) {
+      if (err instanceof FetchRefused) {
+        return fail(
+          err.reason === "robots"
+            ? `blocked: ${err.detail} -- not scraping this source`
+            : `blocked: ${err.detail}, and no stored copy to fall back on`
+        );
+      }
+      summary.notes.push(`${url}: ${err instanceof Error ? err.message : err}`);
+    }
   }
-  summary.notes = result.notes;
+  if (pages.length === 0) return fail("failed: no page could be read");
+
+  let result: ExtractionResult = { events: [], strategy: "none", confidence: "low", notes: [] };
+  for (const page of pages) {
+    const attempt = await extractEvents(page, scraper);
+    result = { ...attempt, notes: [...result.notes, ...attempt.notes] };
+    if (attempt.events.length) break;
+  }
+  summary.notes.push(...result.notes);
   summary.strategy = result.strategy;
 
   if (result.events.length === 0) {
-    for (const line of result.diagnostics ?? []) console.log(line);
-    if (result.blockedReason) {
-      // Not a parser problem: the source turned us away. Usually rate
-      // limiting, so a later run at a normal interval often succeeds.
-      return fail(`blocked: ${result.blockedReason} -- try again later, don't hammer`);
+    for (const page of pages) {
+      for (const line of diagnosePage(page.url, page.html, {
+        requestedUrl: page.requestedUrl,
+        status: page.status,
+        contentType: page.contentType,
+      })) {
+        console.log(line);
+      }
+      for (const line of excerptAround(page.html, "jet-calendar-week__day-event", 900)) console.log(line);
     }
     return fail(`failed: no events found (${result.notes.join("; ")})`);
   }
@@ -172,11 +219,19 @@ export async function runScraperForSource(sourceId: string): Promise<RunSummary>
     });
   }
 
+  const hours = Math.round((summary.snapshotAgeMs ?? 0) / 3_600_000);
+  const provenance = summary.degraded
+    ? `, from stored copy (${hours}h old, live fetch refused: ${summary.degraded})`
+    : summary.fromCache
+      ? `, from stored copy (${hours}h old)`
+      : "";
+
   summary.ok = true;
   summary.status =
     `success: ${summary.created} new, ${summary.updated} updated` +
     (summary.duplicates ? `, ${summary.duplicates} flagged duplicate` : "") +
-    ` (${result.strategy}${result.confidence === "low" ? ", low confidence -> DRAFT" : ""})`;
+    ` (${result.strategy}${result.confidence === "low" ? ", low confidence -> DRAFT" : ""})` +
+    provenance;
 
   await prisma.source.update({
     where: { id: sourceId },

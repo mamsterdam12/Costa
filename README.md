@@ -128,9 +128,35 @@ dat automatisch nieuwe events vindt.
   laatste git-commit en een tijdstip (`src/lib/deploymentInfo.ts`,
   `src/components/Footer.tsx`), zodat altijd te zien is welke deploy je
   bekijkt.
-- **Scrape-scripts** (`src/scrapers/`): één parser per `Source.sourceType`,
-  geregistreerd in `registry.ts`. `run.ts` is de gedeelde orkestratie:
-  haalt de bron op, laat de parser draaien, upsert events op
+- **Scrape-basis** (`src/scrapers/lib/`): een scraper is configuratie, geen
+  machinerie. Alles wat lastig is, gebeurt gedeeld:
+  - `fetcher.ts` — de enige weg naar het internet. Bewaart elke geslaagde
+    respons in `PageSnapshot`, zodat opnieuw draaien (of een parser
+    repareren) géén verzoek kost. Verse kopie binnen een uur? Dan gaat
+    'ie niet eens het net op. Daarnaast: conditionele verzoeken
+    (etag/last-modified, dus 304 zonder body), één verzoek per host per
+    3 seconden, `robots.txt` respecteren inclusief `Crawl-delay`, en
+    meta-refresh-redirects volgen. Wordt een live ophaalpoging geweigerd
+    — SiteGround daagt Railway's IP's standaard uit — dan valt hij terug
+    op de laatst opgeslagen kopie (tot 7 dagen oud) en meldt dat
+    eerlijk, in plaats van niets op te leveren.
+  - `extract.ts` — de gedeelde ladder, meest gestructureerd eerst:
+    schema.org JSON-LD → The Events Calendar REST-API → JetEngine
+    maandkalender → `<time>`-heuristiek. Elke laag draait alleen als de
+    pagina laat zien dat hij van toepassing is, dus een bron die geen
+    WordPress-eventsite is kost nul extra verzoeken om daarachter te
+    komen.
+  - `http.ts` herkent bot-challenges (sgcaptcha, Cloudflare) en stopt
+    daar: een CAPTCHA is de site die zegt niet geautomatiseerd te willen
+    worden, en dat omzeilen we niet.
+
+  Een nieuwe scraper is daardoor meestal een paar regels: `sourceType`,
+  taal, standaardcategorie en eventueel vaste `venueName`/`address`/
+  `organizerSlug` (zie `theFarm.ts`). Alleen een bron die niets generieks
+  leesbaar publiceert heeft een eigen `extract`-functie nodig.
+
+  `run.ts` is de gedeelde orkestratie:
+  haalt de bron op, laat de ladder draaien, upsert events op
   `(sourceName, externalId, startsAt)` (elke herhaling van een event houdt
   zijn eigen rij en id), kent een categorie toe via trefwoordregels (met
   een default per parser), markeert cross-source duplicaten via
@@ -138,12 +164,11 @@ dat automatisch nieuwe events vindt.
   het moment van opslaan, en zet `lastScrapedAt`/`lastScrapeStatus`/
   `needsReview` op de bron. Resultaten met lage betrouwbaarheid komen
   binnen als `DRAFT` en vlaggen de bron; een parser die niets vindt of
-  faalt zet `needsReview: true` — gokken doet 'ie niet. Eerste parser:
-  `theFarm.ts` (`sourceType: "the-farm"`), getrapt: schema.org
-  JSON-LD → The Events Calendar REST-API → voorzichtige HTML-heuristiek.
-  Uitvoeren via de `/scripts`-pagina (knop per bron) of `npm run scrape
-  [sourceType]` voor een toekomstige cron. Zonder authenticatie, net als
-  `/dashboard`.
+  faalt zet `needsReview: true` — gokken doet 'ie niet.
+  Uitvoeren via de `/scripts`-pagina (**Uitvoeren** gebruikt de
+  opgeslagen kopie, **Opnieuw ophalen** forceert een verse fetch) of
+  `npm run scrape [sourceType] [--force]` voor een toekomstige cron.
+  Zonder authenticatie, net als `/dashboard`.
 - **Detailpagina** (`/[region]/[event]`): toont letterlijk elk ingevuld
   veld van het event — titel groot bovenaan, foto, begin-/einddatum,
   herhaling, locatie/adres/coördinaten, categorie, kosten, community,
