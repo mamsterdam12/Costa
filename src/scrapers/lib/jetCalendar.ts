@@ -82,6 +82,8 @@ export type JetCalendarResult = {
   events: ScrapedEvent[];
   /** Hrefs seen inside the first event block, for when none was usable. */
   linkCandidates: string[];
+  /** Raw markup of the first entry, logged when nothing linked at all. */
+  entrySample: string;
   /** False when the month/year had to be guessed from today's date. */
   datesExplicit: boolean;
   label: string;
@@ -89,11 +91,14 @@ export type JetCalendarResult = {
 
 export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResult {
   const grid = blocks(html, "jet-calendar-grid")[0];
-  if (!grid) return { events: [], datesExplicit: false, label: "no jet-calendar-grid", linkCandidates: [] };
+  if (!grid) {
+    return { events: [], datesExplicit: false, label: "no jet-calendar-grid", linkCandidates: [], entrySample: "" };
+  }
 
   const { month, year, explicit } = detectMonthYear(grid);
   const events: ScrapedEvent[] = [];
   let linkCandidates: string[] = [];
+  let entrySample = "";
 
   for (const cell of blocks(grid, "jet-calendar-week__day")) {
     // Cells padding out the first/last week belong to adjacent months.
@@ -118,6 +123,7 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
       const link = eventHref(block, title);
       const href = link.href ? absoluteUrl(link.href, pageUrl) : null;
       if (!linkCandidates.length) linkCandidates = link.candidates.slice(0, 6);
+      if (!entrySample) entrySample = block.slice(0, 700);
       const dayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       events.push({
         externalId: href ?? `${pageUrl}#${slugify(title)}-${dayKey}`,
@@ -133,6 +139,7 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
   return {
     events,
     linkCandidates,
+    entrySample,
     datesExplicit: explicit,
     label: `${year}-${String(month).padStart(2, "0")}${explicit ? "" : " (month/year guessed)"}`,
   };

@@ -96,8 +96,13 @@ export async function extractEvents(page: PageResult, scraper: Scraper): Promise
     notes.push(
       `${label}: jet-calendar ${cal.label}, ${cal.events.length} event(s)` +
         (cal.events[0] ? `, first: "${cal.events[0].title}" -> ${cal.events[0].sourceUrl}` : "") +
-        (cal.events.some((e) => e.sourceUrl === page.url) && cal.linkCandidates.length
-          ? `, links in the first entry: ${cal.linkCandidates.join(" ")}`
+        (cal.events.some((e) => e.sourceUrl === page.url)
+          ? cal.linkCandidates.length
+            ? `, links in the first entry: ${cal.linkCandidates.join(" ")}`
+            : // No link anywhere in the entry: show the markup itself, so
+              // the question "does this site even have event pages?" gets
+              // an answer instead of another guess.
+              `, no link in any entry; first entry reads ${JSON.stringify(cal.entrySample)}`
           : "")
     );
     if (cal.events.length) {
