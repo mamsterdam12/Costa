@@ -21,7 +21,8 @@ export type EventDetails = {
   costType?: "FREE" | "PAID" | "UNKNOWN";
   costAmount?: string;
   description?: string;
-  imageUrl?: string;
+  /** The event's picture, best guess first. */
+  imageUrls: string[];
   /** What was read and what wasn't, for the run log. */
   found: string[];
 };
@@ -80,23 +81,64 @@ export function classifyCost(text: string): { costType: "FREE" | "PAID" | "UNKNO
   return { costType: "UNKNOWN" };
 }
 
-// The event's own picture, never the site's logo: og:image if the page
-// declares one, otherwise an <img> whose file name echoes the title.
-function eventImage(html: string, pageUrl: string, title: string): string | null {
-  const meta = metaContent(html, ["og:image", "og:image:secure_url", "twitter:image"]);
-  if (meta) return absoluteUrl(meta, pageUrl);
-  const srcs: string[] = [];
-  for (const m of html.matchAll(/<img\b[^>]*\ssrc=["']([^"']+)["']/gi)) {
-    const src = decodeEntities(m[1]);
-    if (/logo|icon|avatar|placeholder|spinner|pixel|sprite/i.test(src)) continue;
-    if (!srcs.includes(src)) srcs.push(src);
+// The event's own picture, never the site's logo and never the 60x60
+// thumbnail of a related item. Pages state the size they render an
+// image at, and that is what separates the poster from the furniture.
+const SMALLEST_POSTER = 200;
+
+function attr(tag: string, name: string): string | null {
+  const m = new RegExp(`\\s${name}=["']([^"']*)["']`, "i").exec(tag);
+  return m ? decodeEntities(m[1]) : null;
+}
+
+// srcset lists the same picture at several widths; take the biggest.
+function widestFromSrcset(srcset: string): { src: string; width: number } | null {
+  let best: { src: string; width: number } | null = null;
+  for (const part of srcset.split(",")) {
+    const [src, descriptor] = part.trim().split(/\s+/);
+    if (!src) continue;
+    const width = Number(/^(\d+)w$/.exec(descriptor ?? "")?.[1] ?? 0);
+    if (!best || width > best.width) best = { src, width };
   }
-  const byTitle = pickByTitle(srcs, title);
-  return byTitle ? absoluteUrl(byTitle, pageUrl) : null;
+  return best;
+}
+
+// Returns candidates best-first rather than one answer: a page's og:image
+// is sometimes the same 60x60 thumbnail the listing used, and only
+// fetching it shows that. The importer walks the list until one is big
+// enough to be the event's own picture.
+export function eventImages(html: string, pageUrl: string, title: string): string[] {
+  const ordered: string[] = [];
+  const meta = metaContent(html, ["og:image", "og:image:secure_url", "twitter:image"]);
+  if (meta) ordered.push(absoluteUrl(meta, pageUrl));
+
+  const candidates: Array<{ src: string; width: number }> = [];
+  for (const tag of html.match(/<img\b[^>]*>/gi) ?? []) {
+    const srcset = attr(tag, "srcset");
+    const widest = srcset ? widestFromSrcset(srcset) : null;
+    const src = widest?.src ?? attr(tag, "src");
+    if (!src) continue;
+    if (/logo|icon|avatar|placeholder|spinner|pixel|sprite|blank\./i.test(src)) continue;
+
+    // A declared size is the page telling us how big this is meant to
+    // be; a thumbnail of a related event says 60.
+    const declaredWidth = Number(attr(tag, "width") ?? 0);
+    const declaredHeight = Number(attr(tag, "height") ?? 0);
+    if (declaredWidth && declaredWidth < SMALLEST_POSTER) continue;
+    if (declaredHeight && declaredHeight < SMALLEST_POSTER) continue;
+
+    candidates.push({ src, width: Math.max(widest?.width ?? 0, declaredWidth) });
+  }
+  const byTitle = pickByTitle(candidates.map((c) => c.src), title);
+  if (byTitle) ordered.push(absoluteUrl(byTitle, pageUrl));
+  for (const c of [...candidates].sort((a, b) => b.width - a.width)) {
+    ordered.push(absoluteUrl(c.src, pageUrl));
+  }
+  return [...new Set(ordered)].slice(0, 4);
 }
 
 export function extractDetails(page: PageResult, title: string): EventDetails {
-  const details: EventDetails = { found: [] };
+  const details: EventDetails = { imageUrls: [], found: [] };
   const text = stripTags(page.html);
   const values = labelledValues(text);
 
@@ -129,6 +171,22 @@ export function extractDetails(page: PageResult, title: string): EventDetails {
   const priceRow = valueFor(values, LABELS.price);
 
   details.time ??= (timeRow ? parseTimeOfDay(timeRow) : null) ?? undefined;
+  // Not every page labels the hour; plenty write it in a sentence.
+  // Only lines that announce a time are read, so a price or a house
+  // number can't become one.
+  if (!details.time) {
+    for (const line of text.split("\n")) {
+      if (!/\b(horario|hora|a las|desde las|apertura|inicio|comienza|doors|starts|from)\b/i.test(line)) {
+        continue;
+      }
+      const time = parseTimeOfDay(line);
+      if (time) {
+        details.time = time;
+        details.found.push(`time in text="${line.trim().slice(0, 60)}"`);
+        break;
+      }
+    }
+  }
   if (placeRow) {
     details.venueName ??= placeRow;
     details.address ??= placeRow;
@@ -140,9 +198,9 @@ export function extractDetails(page: PageResult, title: string): EventDetails {
       details.costAmount = cost.costType === "PAID" ? (cost.costAmount ?? priceRow) : undefined;
     }
   }
-  for (const [label, row] of [["time", timeRow], ["place", placeRow], ["price", priceRow]] as const) {
-    if (row) details.found.push(`${label}="${row.slice(0, 60)}"`);
-  }
+  if (timeRow && details.time) details.found.push(`time="${timeRow.slice(0, 40)}"`);
+  if (placeRow) details.found.push(`place="${placeRow.slice(0, 40)}"`);
+  if (priceRow) details.found.push(`price="${priceRow.slice(0, 40)}"`);
 
   // 3. The page's own summary and picture.
   const summary = metaContent(page.html, ["og:description", "description", "twitter:description"]);
@@ -150,11 +208,8 @@ export function extractDetails(page: PageResult, title: string): EventDetails {
     details.description = summary;
     details.found.push("description");
   }
-  const image = eventImage(page.html, page.url, title);
-  if (image) {
-    details.imageUrl = image;
-    details.found.push("image");
-  }
+  details.imageUrls = eventImages(page.html, page.url, title);
+  if (details.imageUrls.length) details.found.push(`${details.imageUrls.length} image candidate(s)`);
 
   return details;
 }

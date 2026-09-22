@@ -28,7 +28,7 @@ export async function importEventImage(
     imageUrl: string | null;
     imageWidth: number | null;
   },
-  imageUrl: string
+  imageUrls: string[]
 ): Promise<string | null> {
   // A picture already checked against the rule below stays. One stored
   // before there was a rule has no dimensions recorded, and gets fetched
@@ -36,6 +36,24 @@ export async function importEventImage(
   if (event.imageKey && (event.imageWidth ?? 0) >= MIN_PIXELS) return `/api/images/${event.imageKey}`;
   if (event.imageKey && !event.imageUrl) return `/api/images/${event.imageKey}`;
   if (!storageAvailable()) return null;
+
+  for (const url of imageUrls.slice(0, 4)) {
+    const stored = await tryImport(event, url);
+    if (stored) return stored;
+  }
+  // Nothing on the page was the event's own picture. Drop a copy stored
+  // under the older, size-only rule so the event shows none rather than
+  // a spacer -- and can still get a generated one later.
+  if (event.imageKey && event.imageUrl) {
+    await prisma.event.update({ where: { id: event.id }, data: { imageKey: null, imageUrl: null } });
+  }
+  return null;
+}
+
+async function tryImport(
+  event: { id: string; slug: string; imageKey: string | null; imageUrl: string | null },
+  imageUrl: string
+): Promise<string | null> {
 
   try {
     await waitForHostTurn(imageUrl);

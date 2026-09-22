@@ -102,12 +102,12 @@ async function addDetails(
       if (details.description && details.description.length > ev.description.length) {
         ev.description = details.description;
       }
-      ev.imageUrl ??= details.imageUrl;
+      if (!ev.imageUrls?.length) ev.imageUrls = details.imageUrls;
       if (details.time) gained.time++;
       if (details.venueName) gained.place++;
       if (details.costType && details.costType !== "UNKNOWN") gained.price++;
       if (details.description) gained.text++;
-      if (details.imageUrl) gained.image++;
+      if (details.imageUrls.length) gained.image++;
       if (read <= 2) summary.notes.push(`"${ev.title}" detail: ${details.found.join(", ") || "nothing"}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -340,7 +340,7 @@ export async function runScraperForSource(
     // The source's own poster beats anything we could generate, so it is
     // tried first; generation stays as the fallback for sources that
     // publish no picture at all.
-    if (ev.imageUrl) await importEventImage(event, ev.imageUrl);
+    if (ev.imageUrls?.length) await importEventImage(event, ev.imageUrls);
 
     await getOrGenerateEventImageUrl({
       id: event.id,

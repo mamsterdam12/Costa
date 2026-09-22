@@ -155,7 +155,7 @@ async function main() {
   check("reads the summary", details.description?.startsWith("XXI Moraga Carnavalesca"), true);
   check(
     "takes the poster, not the site logo",
-    details.imageUrl,
+    details.imageUrls[0],
     "https://turismo.marbella.es/images/agenda/2026/moraga-carnavalesca-2026.jpg"
   );
   // A listing date is midnight; the detail page is what makes it 20:00.
@@ -166,6 +166,21 @@ async function main() {
   );
   check("a price in euros is not free", classifyCost("12 € por persona").costType, "PAID");
   check("no price stated stays unknown", classifyCost("Aforo limitado").costType, "UNKNOWN");
+
+  const plainPage: PageResult = {
+    ...detailPage,
+    requestedUrl: "https://turismo.marbella.es/agenda/show-de-magia.html",
+    url: "https://turismo.marbella.es/agenda/show-de-magia.html",
+    html: readFileSync(join(__dirname, "lib/fixtures/detail-page-nometa.html"), "utf8"),
+  };
+  const plain = extractDetails(plainPage, "Show de Magia");
+  check(
+    "poster wins over the related item's thumbnail",
+    plain.imageUrls[0],
+    "https://turismo.marbella.es/images/agenda/2026/show-de-magia-cartel-1200.jpg"
+  );
+  check("the thumbnail is never a candidate", plain.imageUrls.some((u) => u.includes("thumb")), false);
+  check("time read from a sentence", plain.time, { hour: 21, minute: 0 });
 
   console.log("image headers:");
   // A PNG says its size in bytes 16-24; a JPEG in its SOF0 segment.
