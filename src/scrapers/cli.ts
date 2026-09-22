@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { scrapers } from "./registry";
 import { runScraperForSource } from "./run";
+import { formatStamp } from "../lib/datetime";
 
 // Command-line entry point for the regular (cron-style) scrape:
 //   npm run scrape            -> every active EVENTS source with a scraper
@@ -24,6 +25,41 @@ async function main() {
     const summary = await runScraperForSource(source.id, { force });
     console.log(`[scrape] ${summary.sourceName}: ${summary.status}`);
     for (const note of summary.notes) console.log(`         - ${note}`);
+  }
+
+  await reportStoredEvents();
+}
+
+// What the run actually left in the database, as the site will show it.
+// The per-source summaries say what was read; this says what was kept,
+// which is the thing worth checking after a change to the parsers.
+async function reportStoredEvents() {
+  const events = await prisma.event.findMany({
+    where: { startsAt: { gte: new Date() } },
+    orderBy: { startsAt: "asc" },
+    take: 5,
+  });
+  const total = await prisma.event.count({ where: { startsAt: { gte: new Date() } } });
+  const missing = {
+    time: await prisma.event.count({ where: { startsAt: { gte: new Date() }, startTimeKnown: false } }),
+    venue: await prisma.event.count({ where: { startsAt: { gte: new Date() }, venueName: null } }),
+    address: await prisma.event.count({ where: { startsAt: { gte: new Date() }, address: null } }),
+    cost: await prisma.event.count({ where: { startsAt: { gte: new Date() }, costType: "UNKNOWN" } }),
+    image: await prisma.event.count({ where: { startsAt: { gte: new Date() }, imageKey: null } }),
+    url: await prisma.event.count({ where: { startsAt: { gte: new Date() }, sourceUrl: null } }),
+  };
+
+  console.log(`[stored] ${total} upcoming event(s)`);
+  console.log(
+    `[stored] without: ${missing.time} a time, ${missing.venue} a venue, ${missing.address} an address, ` +
+      `${missing.cost} a price, ${missing.image} a picture, ${missing.url} their own URL`
+  );
+  for (const e of events) {
+    console.log(
+      `[stored] ${formatStamp(e.startsAt, "nl-NL")}${e.startTimeKnown ? "" : " (date only)"} | ${e.title}` +
+        ` | ${e.venueName ?? "no venue"} | ${e.address ?? "no address"} | ${e.costType}` +
+        `${e.costAmount ? ` ${e.costAmount}` : ""} | ${e.imageKey ?? "no image"} | ${e.sourceUrl ?? "no url"}`
+    );
   }
 }
 
