@@ -211,6 +211,10 @@ model Event {
   sourceLocale String @default("nl") // language this event was authored/found in
 
   startsAt       DateTime
+  // False when the source gave a date but no hour: startsAt is then
+  // midnight local, which is a placeholder, not a claim that the event
+  // starts at midnight. Pages show the date alone in that case.
+  startTimeKnown Boolean @default(true)
   endsAt         DateTime?
   recurrenceRule String?
 

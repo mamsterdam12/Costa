@@ -362,6 +362,15 @@ export const ui = {
     da: "Oprettet af",
   },
   image: { nl: "Foto", en: "Photo", es: "Foto", de: "Foto", fr: "Photo", sv: "Foto", da: "Foto" },
+  startTime: {
+    nl: "Aanvangstijd",
+    en: "Start time",
+    es: "Hora de inicio",
+    de: "Beginn",
+    fr: "Heure de début",
+    sv: "Starttid",
+    da: "Starttidspunkt",
+  },
   imageSource: {
     nl: "Fotobron",
     en: "Photo source",

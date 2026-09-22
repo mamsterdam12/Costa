@@ -97,6 +97,8 @@ function toScrapedEvent(node: JsonLdNode, pageUrl: string): ScrapedEvent | null 
     title,
     description: stripTags(asString(node.description) ?? ""),
     startsAt,
+    // "2026-09-26" is a date; "2026-09-26T20:00" states an hour.
+    startTimeKnown: /T\d{2}:/.test(String(node.startDate ?? "")),
     endsAt: parseDate(node.endDate),
     venueName,
     address: address || undefined,

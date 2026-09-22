@@ -33,7 +33,7 @@ const DAY_MONTH_YEAR = new RegExp(
 const NUMERIC = /(\d{1,2})[/-](\d{1,2})[/-](\d{4})|(\d{4})-(\d{2})-(\d{2})/;
 const TIME = /(?:a\s+las\s+)?\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b/i;
 
-export type DateRange = { start: Date; end?: Date };
+export type DateRange = { start: Date; end?: Date; timeKnown: boolean };
 
 function buildDate(day: number, month: number, year: number, text: string): Date | null {
   if (!day || !month || !year || day > 31 || month > 12) return null;
@@ -70,11 +70,15 @@ export function parseDateRange(raw: string): DateRange | null {
     if (start) {
       // Some listings have the range backwards; an end before the start
       // is data we can't trust, so keep only what we're sure of.
-      return { start, end: end && end.getTime() > start.getTime() ? end : undefined };
+      return {
+        start,
+        end: end && end.getTime() > start.getTime() ? end : undefined,
+        timeKnown: !!TIME.exec(parts[0]),
+      };
     }
   }
   const start = parseOne(text);
-  return start ? { start } : null;
+  return start ? { start, timeKnown: !!TIME.exec(text) } : null;
 }
 
 // "From 7.30PM", "20:00", "20.00 h", "a las 20:00 h" -> wall-clock time.

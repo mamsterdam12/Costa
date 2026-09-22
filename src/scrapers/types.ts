@@ -7,6 +7,8 @@ export type ScrapedEvent = {
   title: string;
   description: string;
   startsAt: Date;
+  /** True only when the source stated an hour, not just a date. */
+  startTimeKnown?: boolean;
   endsAt?: Date;
   venueName?: string;
   address?: string;

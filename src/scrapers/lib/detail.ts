@@ -199,6 +199,9 @@ export function extractDetails(page: PageResult, title: string): EventDetails {
     }
   }
   if (timeRow && details.time) details.found.push(`time="${timeRow.slice(0, 40)}"`);
+  if (!details.time && values.size) {
+    details.found.push(`labels: ${[...values.keys()].slice(0, 8).join(" | ")}`);
+  }
   if (placeRow) details.found.push(`place="${placeRow.slice(0, 40)}"`);
   if (priceRow) details.found.push(`price="${priceRow.slice(0, 40)}"`);
 

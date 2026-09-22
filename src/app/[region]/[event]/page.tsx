@@ -7,14 +7,16 @@ import { formatInMarbella } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
-function formatDate(date: Date, locale: Locale) {
+// The hour is only printed when the source actually stated one; an
+// event stored at midnight for want of a time would otherwise read as
+// starting at 00:00. See Event.startTimeKnown.
+function formatDate(date: Date, locale: Locale, timeKnown = true) {
   return formatInMarbella(date, locale, {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    ...(timeKnown ? { hour: "2-digit" as const, minute: "2-digit" as const } : {}),
   });
 }
 
@@ -129,7 +131,20 @@ export default async function EventPage({
       )}
 
       <dl className="mt-6 rounded-xl border border-sea-100 bg-white px-5">
-        <DetailRow label={ui.startDate[locale]} value={formatDate(event.startsAt, locale)} {...rowProps} />
+        <DetailRow
+          label={ui.startDate[locale]}
+          value={formatDate(event.startsAt, locale, event.startTimeKnown)}
+          {...rowProps}
+        />
+        <DetailRow
+          label={ui.startTime[locale]}
+          value={
+            event.startTimeKnown
+              ? formatInMarbella(event.startsAt, locale, { hour: "2-digit", minute: "2-digit" })
+              : null
+          }
+          {...rowProps}
+        />
         <DetailRow
           label={ui.endDate[locale]}
           value={event.endsAt && formatDate(event.endsAt, locale)}

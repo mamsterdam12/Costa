@@ -121,6 +121,7 @@ export function parseUikitListing(
       title,
       description,
       startsAt: range.start,
+      startTimeKnown: range.timeKnown,
       endsAt: range.end,
       sourceUrl,
       costType: "UNKNOWN",

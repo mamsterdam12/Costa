@@ -92,7 +92,10 @@ async function addDetails(
       const page = await fetchPage(ev.sourceUrl, { maxAgeMs: DETAIL_MAX_AGE_MS, force });
       read++;
       const details = extractDetails(page, ev.title);
-      if (details.time) ev.startsAt = atTimeInMarbella(ev.startsAt, details.time);
+      if (details.time) {
+        ev.startsAt = atTimeInMarbella(ev.startsAt, details.time);
+        ev.startTimeKnown = true;
+      }
       ev.venueName ??= details.venueName;
       ev.address ??= details.address;
       if ((ev.costType ?? "UNKNOWN") === "UNKNOWN" && details.costType && details.costType !== "UNKNOWN") {
@@ -251,6 +254,7 @@ export async function runScraperForSource(
       title: ev.title,
       description: ev.description,
       sourceLocale: scraper.sourceLocale,
+      startTimeKnown: ev.startTimeKnown ?? false,
       endsAt: ev.endsAt ?? null,
       venueName: ev.venueName ?? scraper.venueName ?? null,
       address: ev.address ?? scraper.address ?? null,

@@ -68,6 +68,7 @@ export function parseFeed(xml: string, feedUrl: string): FeedResult {
       title,
       description: summary,
       startsAt: range.start,
+      startTimeKnown: range.timeKnown,
       endsAt: range.end,
       sourceUrl: link ?? feedUrl,
       costType: "UNKNOWN",

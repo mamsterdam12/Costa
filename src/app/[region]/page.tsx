@@ -11,13 +11,15 @@ export const dynamic = "force-dynamic";
 
 const dateFilters: DateFilter[] = ["today", "tomorrow", "weekend", "week", "month"];
 
-function formatDate(date: Date, locale: Locale) {
+// An event whose source gave only a date is stored at midnight local.
+// Printing "00:00" would state an hour the source never gave, so the
+// time is shown only when it is known.
+function formatDate(date: Date, locale: Locale, timeKnown = true) {
   return formatInMarbella(date, locale, {
     weekday: "short",
     day: "numeric",
     month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+    ...(timeKnown ? { hour: "2-digit" as const, minute: "2-digit" as const } : {}),
   });
 }
 
@@ -201,7 +203,7 @@ export default async function RegionPage({
                 {event.title}
               </Link>
               <p className="mt-2 text-xs font-medium text-sea-900/50">
-                {formatDate(event.startsAt, locale)}
+                {formatDate(event.startsAt, locale, event.startTimeKnown)}
                 {event.venueName ? ` · ${event.venueName}` : ""}
               </p>
               <p className="mt-2 text-sm text-sea-900/70">{excerpt(event.description)}</p>

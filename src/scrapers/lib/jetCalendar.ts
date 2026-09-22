@@ -116,8 +116,8 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
 
       const title = lines[0];
       const rest = lines.slice(1);
-      const time = parseTimeOfDay(rest.join(" ")) ?? parseTimeOfDay(title) ?? { hour: 0, minute: 0 };
-      const startsAt = marbellaTimeToUtc(year, month, day, time.hour, time.minute);
+      const time = parseTimeOfDay(rest.join(" ")) ?? parseTimeOfDay(title);
+      const startsAt = marbellaTimeToUtc(year, month, day, time?.hour ?? 0, time?.minute ?? 0);
       const markup = withoutAssets(block);
       const link = eventHref(markup, title);
       const href = link.href ? absoluteUrl(link.href, pageUrl) : null;
@@ -129,6 +129,7 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
         title,
         description: rest.join(" · "),
         startsAt,
+        startTimeKnown: !!time,
         sourceUrl: href ?? pageUrl,
         costType: "UNKNOWN",
       });
