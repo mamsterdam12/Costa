@@ -1,6 +1,7 @@
 import type { ScrapedEvent } from "../types";
 import { absoluteUrl, slugify, stripTags } from "./html";
 import { parseDateRange } from "./dates";
+import { collectHrefs, pickByTitle } from "./links";
 
 // YOOtheme Pro (the page builder behind a great many Joomla and
 // WordPress sites, including turismo.marbella.es) renders each listing
@@ -44,15 +45,6 @@ function nearestAfter(html: string, start: number, token: string, window = 1200)
   return at < 0 ? null : elementText(slice, at);
 }
 
-// Words long enough to identify one entry rather than any page on the
-// site ("agenda", "marbella", "2026" would match everything).
-const STOPWORDS = new Set(["agenda", "index", "event", "evento", "eventos", "marbella", "turismo"]);
-function distinctiveWords(text: string): string[] {
-  return slugify(text)
-    .split("-")
-    .filter((w) => w.length >= 4 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
-}
-
 // An entry's own page. The card is usually wrapped in a link, but its
 // shape differs per site, so the surest signal is the URL echoing the
 // title's own words; a path pattern is the fallback. A wrong URL is
@@ -72,29 +64,10 @@ export function entryLink(
   const nextEntry = ahead.search(/\bel-title\b/);
   const after = nextEntry < 0 ? ahead : ahead.slice(0, nextEntry);
 
-  const collect = (slice: string, into: string[]) => {
-    for (const m of slice.matchAll(/href=["']([^"'#]+)["']/gi)) {
-      const href = m[1].trim();
-      if (!href || href.startsWith("javascript:") || href.startsWith("mailto:")) continue;
-      if (!into.includes(href)) into.push(href);
-    }
-  };
-  const backward: string[] = [];
-  collect(before, backward);
-  const candidates = [...backward];
-  collect(after, candidates);
+  const backward = collectHrefs(before);
+  const candidates = collectHrefs(after, [...backward]);
 
-  const words = distinctiveWords(title);
-  let best: string | null = null;
-  let bestScore = 0;
-  for (const href of candidates) {
-    const hrefWords = new Set(slugify(href).split("-"));
-    const score = words.filter((w) => hrefWords.has(w)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      best = href;
-    }
-  }
+  const best = pickByTitle(candidates, title);
   if (best) return { href: best, candidates };
 
   // Nothing echoed the title: fall back to the nearest link that at

@@ -1,0 +1,38 @@
+<!-- JetEngine (Crocoblock) listing calendar, rebuilt from the class names
+     thefarm-marbella.com's /whats-on/ page uses. Synthetic on purpose: it
+     exercises the shapes the parser has to survive -- a padded cell from
+     the neighbouring month, the same entry rendered twice (grid + mobile
+     overlay), a link that belongs to the next entry, and an entry with no
+     link at all. -->
+<div class="jet-calendar-grid">
+  <select name="month"><option>September</option><option selected>October</option></select>
+  <select name="year"><option selected>2026</option></select>
+  <div class="jet-calendar-week">
+    <div class="jet-calendar-week__day day-pad">
+      <div class="jet-calendar-week__day-date">30</div>
+      <div class="jet-calendar-week__day-event"><a href="/event/last-month-party/">Last Month Party</a></div>
+    </div>
+    <div class="jet-calendar-week__day">
+      <div class="jet-calendar-week__day-date">13</div>
+      <div class="jet-calendar-week__day-event">
+        <a class="card" href="/whats-on/flamenco-night/">
+          <div class="title">Flamenco Night</div>
+          <div class="meta">From 8.30PM</div>
+        </a>
+      </div>
+      <div class="jet-calendar-week__day-event jet-calendar-week__day-event--mobile">
+        <a class="card" href="/whats-on/flamenco-night/">
+          <div class="title">Flamenco Night</div>
+          <div class="meta">From 8.30PM</div>
+        </a>
+      </div>
+    </div>
+    <div class="jet-calendar-week__day">
+      <div class="jet-calendar-week__day-date">14</div>
+      <div class="jet-calendar-week__day-event">
+        <div class="title">Sunday Roast</div>
+        <div class="meta">From 1 PM</div>
+      </div>
+    </div>
+  </div>
+</div>

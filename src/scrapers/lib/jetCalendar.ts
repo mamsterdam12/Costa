@@ -1,6 +1,7 @@
 import type { ScrapedEvent } from "../types";
 import { absoluteUrl, slugify, stripTags } from "./html";
 import { marbellaTimeToUtc } from "../../lib/datetime";
+import { collectHrefs, pickByTitle } from "./links";
 
 // Parser for JetEngine's (Crocoblock) "Listing Calendar" Elementor
 // widget -- a month grid of `jet-calendar-week__day` cells, each with a
@@ -65,21 +66,22 @@ function parseTime(text: string): { hour: number; minute: number } | null {
   return null;
 }
 
-// Only look at the start of the block: without a real DOM the slices run
-// on to the next marker, so a link found far down is as likely to belong
-// to the next element as to this event.
-function firstHref(block: string, pageUrl: string): string | null {
-  const html = block.slice(0, 400);
-  for (const m of html.matchAll(/<a[^>]*href=["']([^"']+)["']/gi)) {
-    const href = m[1];
-    if (href.startsWith("#") || /^(javascript|mailto|tel):/i.test(href)) continue;
-    return absoluteUrl(href, pageUrl);
-  }
-  return null;
+// Without a real DOM the block slices run on into the next element, so a
+// link far down is as likely to belong to the neighbour as to this
+// event. Two ways to be sure it doesn't: a URL echoing this event's own
+// title, from anywhere in the block, or the very first link in it.
+function eventHref(block: string, title: string): { href: string | null; candidates: string[] } {
+  const candidates = collectHrefs(block.slice(0, 1200));
+  const byTitle = pickByTitle(candidates, title);
+  if (byTitle) return { href: byTitle, candidates };
+  const near = collectHrefs(block.slice(0, 400));
+  return { href: near[0] ?? null, candidates };
 }
 
 export type JetCalendarResult = {
   events: ScrapedEvent[];
+  /** Hrefs seen inside the first event block, for when none was usable. */
+  linkCandidates: string[];
   /** False when the month/year had to be guessed from today's date. */
   datesExplicit: boolean;
   label: string;
@@ -87,10 +89,11 @@ export type JetCalendarResult = {
 
 export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResult {
   const grid = blocks(html, "jet-calendar-grid")[0];
-  if (!grid) return { events: [], datesExplicit: false, label: "no jet-calendar-grid" };
+  if (!grid) return { events: [], datesExplicit: false, label: "no jet-calendar-grid", linkCandidates: [] };
 
   const { month, year, explicit } = detectMonthYear(grid);
   const events: ScrapedEvent[] = [];
+  let linkCandidates: string[] = [];
 
   for (const cell of blocks(grid, "jet-calendar-week__day")) {
     // Cells padding out the first/last week belong to adjacent months.
@@ -112,7 +115,9 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
       const rest = lines.slice(1);
       const time = parseTime(rest.join(" ")) ?? parseTime(title) ?? { hour: 0, minute: 0 };
       const startsAt = marbellaTimeToUtc(year, month, day, time.hour, time.minute);
-      const href = firstHref(block, pageUrl);
+      const link = eventHref(block, title);
+      const href = link.href ? absoluteUrl(link.href, pageUrl) : null;
+      if (!linkCandidates.length) linkCandidates = link.candidates.slice(0, 6);
       const dayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       events.push({
         externalId: href ?? `${pageUrl}#${slugify(title)}-${dayKey}`,
@@ -127,6 +132,7 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
 
   return {
     events,
+    linkCandidates,
     datesExplicit: explicit,
     label: `${year}-${String(month).padStart(2, "0")}${explicit ? "" : " (month/year guessed)"}`,
   };

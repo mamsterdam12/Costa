@@ -4,6 +4,7 @@ import { parseDateRange } from "./lib/dates";
 import { parseUikitListing } from "./lib/uikitListing";
 import { findFeedUrls, parseFeed } from "./lib/feed";
 import { extractEvents } from "./lib/extract";
+import { parseJetCalendar } from "./lib/jetCalendar";
 import type { PageResult } from "./lib/fetcher";
 import { turismoMarbellaScraper } from "./turismoMarbella";
 import { MARBELLA_TZ, marbellaDay } from "../lib/datetime";
@@ -113,6 +114,19 @@ async function main() {
   check("high confidence -> published", ladder.confidence, "high");
   check("every event carries a date", ladder.events.every((e) => !isNaN(e.startsAt.getTime())), true);
   check("no event points at a listing page", ladder.events.filter((e) => e.sourceUrl.endsWith("/agenda.html")).length, 3);
+
+  console.log("jet calendar (The Farm):");
+  const jet = parseJetCalendar(
+    readFileSync(join(__dirname, "lib/fixtures/jet-calendar.html"), "utf8"),
+    "https://thefarm-marbella.com/whats-on/"
+  );
+  check("month and year read, not guessed", [jet.label, jet.datesExplicit], ["2026-10", true]);
+  check("one row per event, overlay copy dropped", jet.events.length, 2);
+  check("entry keeps its own URL", jet.events[0]?.sourceUrl, "https://thefarm-marbella.com/whats-on/flamenco-night/");
+  check("evening time in Marbella", jet.events[0]?.startsAt.toISOString(), "2026-10-13T18:30:00.000Z");
+  check("cell from the neighbouring month ignored", jet.events.some((e) => e.title === "Last Month Party"), false);
+  check("entry without a link falls back to the page", jet.events[1]?.sourceUrl, "https://thefarm-marbella.com/whats-on/");
+  check("never borrows the next entry's URL", jet.events[1]?.externalId.includes("#"), true);
 
   console.log("feed:");
   check("finds the advertised feed", findFeedUrls(html, "https://turismo.marbella.es/agenda.html"), [

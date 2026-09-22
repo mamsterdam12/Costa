@@ -95,7 +95,10 @@ export async function extractEvents(page: PageResult, scraper: Scraper): Promise
     const cal = parseJetCalendar(page.html, page.url);
     notes.push(
       `${label}: jet-calendar ${cal.label}, ${cal.events.length} event(s)` +
-        (cal.events[0] ? `, first: "${cal.events[0].title}" -> ${cal.events[0].sourceUrl}` : "")
+        (cal.events[0] ? `, first: "${cal.events[0].title}" -> ${cal.events[0].sourceUrl}` : "") +
+        (cal.events.some((e) => e.sourceUrl === page.url) && cal.linkCandidates.length
+          ? `, links in the first entry: ${cal.linkCandidates.join(" ")}`
+          : "")
     );
     if (cal.events.length) {
       return {
