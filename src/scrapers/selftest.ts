@@ -6,7 +6,7 @@ import { findFeedUrls, parseFeed } from "./lib/feed";
 import { extractEvents } from "./lib/extract";
 import type { PageResult } from "./lib/fetcher";
 import { turismoMarbellaScraper } from "./turismoMarbella";
-import { MARBELLA_TZ } from "../lib/datetime";
+import { MARBELLA_TZ, marbellaDay } from "../lib/datetime";
 
 // Parser tests that need no network and no database, so a change to the
 // extraction ladder can be checked here in seconds instead of by pushing
@@ -67,6 +67,11 @@ async function main() {
     parseDateRange("13 okt 2026 20:00")?.start.toISOString(),
     "2026-10-13T18:00:00.000Z"
   );
+
+  // An event that starts at midnight local is still that day, not the
+  // UTC day before -- which is what its slug is built from.
+  check("calendar day is the Marbella one", marbellaDay(parseDateRange("28 Mayo 2026")!.start), "2026-05-28");
+  check("calendar day in winter time", marbellaDay(parseDateRange("15 enero 2026")!.start), "2026-01-15");
 
   console.log("yootheme listing (turismo.marbella.es):");
   const html = readFileSync(join(__dirname, "lib/fixtures/turismo-agenda.html"), "utf8");

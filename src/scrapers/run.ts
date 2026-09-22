@@ -6,7 +6,7 @@ import { shortHash, slugify } from "./lib/html";
 import { FetchRefused, fetchPage, type PageResult } from "./lib/fetcher";
 import { extractEvents, type ExtractionResult } from "./lib/extract";
 import { DATE_LIKE, diagnosePage, excerptsAroundPattern } from "./lib/diagnose";
-import { startOfTodayInMarbella } from "../lib/datetime";
+import { marbellaDay, startOfTodayInMarbella } from "../lib/datetime";
 
 export type RunSummary = {
   sourceId: string;
@@ -50,8 +50,7 @@ function pickCategorySlug(ev: ScrapedEvent, fallback: string): string {
 }
 
 function makeSlug(ev: ScrapedEvent): string {
-  const day = ev.startsAt.toISOString().slice(0, 10);
-  return `${slugify(ev.title).slice(0, 60)}-${day}-${shortHash(ev.externalId)}`;
+  return `${slugify(ev.title).slice(0, 60)}-${marbellaDay(ev.startsAt)}-${shortHash(ev.externalId)}`;
 }
 
 function normalizeTitle(title: string): string {
@@ -195,10 +194,16 @@ export async function runScraperForSource(
     const existing = await prisma.event.findUnique({
       where: { sourceName_externalId_startsAt: key },
     });
+    // A slug is deterministic, so it only differs when the rule that
+    // builds it changed -- then the stored one is the stale one.
+    const slug = makeSlug(ev);
     const event = existing
-      ? await prisma.event.update({ where: { id: existing.id }, data })
+      ? await prisma.event.update({
+          where: { id: existing.id },
+          data: existing.slug === slug ? data : { ...data, slug },
+        })
       : await prisma.event.create({
-          data: { ...data, ...key, slug: makeSlug(ev), regionId: source.regionId, status },
+          data: { ...data, ...key, slug, regionId: source.regionId, status },
         });
     if (existing) summary.updated++;
     else summary.created++;

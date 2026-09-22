@@ -62,3 +62,10 @@ export function startOfTodayInMarbella(now = new Date()): Date {
   }
   return marbellaTimeToUtc(p.year, p.month, p.day, 0, 0);
 }
+
+// The calendar day an instant falls on in Marbella, as YYYY-MM-DD. The
+// UTC day is a day early for anything before 01:00 local, which is how
+// a 28 May event ended up with "2026-05-27" in its slug.
+export function marbellaDay(date: Date): string {
+  return formatInMarbella(date, "en-CA", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
