@@ -93,7 +93,11 @@ async function addDetails(
       const page = await fetchPage(ev.sourceUrl, { maxAgeMs: DETAIL_MAX_AGE_MS, force });
       read++;
       const details = extractDetails(page, ev.title);
-      if (details.time) {
+      // Only fill in an hour the listing didn't give. A calendar entry
+      // states the time of that occurrence; the detail page describes
+      // the event in general ("bookings from 18:45"), and letting it
+      // win moved two shows on the same evening onto one another.
+      if (details.time && !ev.startTimeKnown) {
         ev.startsAt = atTimeInMarbella(ev.startsAt, details.time);
         ev.startTimeKnown = true;
       }
@@ -321,6 +325,8 @@ export async function runScraperForSource(
             ...(existing.slug === slug ? {} : { slug }),
             ...(existing.externalId === ev.externalId ? {} : { externalId: ev.externalId }),
             ...(existing.startsAt.getTime() === ev.startsAt.getTime() ? {} : { startsAt: ev.startsAt }),
+            // Listed again after being archived: it is on after all.
+            ...(existing.status === "ARCHIVED" ? { status } : {}),
           },
         })
       : await prisma.event.create({
@@ -365,6 +371,21 @@ export async function runScraperForSource(
       categoryName: category.name,
     });
   }
+
+  // Rows this source used to list and no longer does -- an occurrence
+  // that was cancelled, or one of ours that an identity change left
+  // behind. Archived rather than deleted: the row keeps its id and
+  // anything attached to it, and public pages stop showing it.
+  const stale = await prisma.event.updateMany({
+    where: {
+      sourceId: source.id,
+      status: { not: "ARCHIVED" },
+      startsAt: { gte: startOfTodayInMarbella() },
+      OR: [{ lastSeenAt: { lt: now } }, { lastSeenAt: null }],
+    },
+    data: { status: "ARCHIVED" },
+  });
+  if (stale.count) summary.notes.push(`${stale.count} event(s) the source no longer lists: archived`);
 
   const hours = Math.round((summary.snapshotAgeMs ?? 0) / 3_600_000);
   const provenance = summary.degraded
