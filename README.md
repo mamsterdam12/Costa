@@ -154,6 +154,15 @@ dat automatisch nieuwe events vindt.
   taal, standaardcategorie en eventueel vaste `venueName`/`address`/
   `organizerSlug` (zie `theFarm.ts`). Alleen een bron die niets generieks
   leesbaar publiceert heeft een eigen `extract`-functie nodig.
+  `turismoMarbella.ts` is het bewijs: de gemeentelijke agenda is puur
+  configuratie, zonder één regel fetch- of parseercode. Bij een bron die
+  meerdere locaties bundelt blijven `venueName` en `organizerSlug` juist
+  leeg — die invullen zou voor bijna elk event onjuist zijn; wat de
+  pagina zelf zegt, wordt opgeslagen.
+
+  Events die al voorbij zijn worden centraal overgeslagen (`run.ts`),
+  niet per extractielaag: een overzichtspagina toont routinematig ook de
+  eerdere dagen van deze maand, en schrapen is voor wat er nog komt.
 
   `run.ts` is de gedeelde orkestratie:
   haalt de bron op, laat de ladder draaien, upsert events op

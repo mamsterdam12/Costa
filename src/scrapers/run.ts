@@ -6,6 +6,7 @@ import { shortHash, slugify } from "./lib/html";
 import { FetchRefused, fetchPage, type PageResult } from "./lib/fetcher";
 import { extractEvents, type ExtractionResult } from "./lib/extract";
 import { diagnosePage, excerptAround } from "./lib/diagnose";
+import { startOfTodayInMarbella } from "../lib/datetime";
 
 export type RunSummary = {
   sourceId: string;
@@ -16,6 +17,8 @@ export type RunSummary = {
   created: number;
   updated: number;
   duplicates: number;
+  /** Entries the listing still showed but that are already over. */
+  skippedPast: number;
   notes: string[];
   /** No page was fetched live; everything came from stored snapshots. */
   fromCache?: boolean;
@@ -77,6 +80,7 @@ export async function runScraperForSource(
     created: 0,
     updated: 0,
     duplicates: 0,
+    skippedPast: 0,
     notes: [],
   };
 
@@ -157,7 +161,16 @@ export async function runScraperForSource(
   const status = result.confidence === "high" ? "PUBLISHED" : "DRAFT";
   const now = new Date();
 
+  // A listing routinely still shows this month's earlier entries. Scraping
+  // is for what's on, not for backfilling history, and one rule here beats
+  // each extraction tier deciding for itself (they used to disagree).
+  const notBefore = startOfTodayInMarbella().getTime();
+
   for (const ev of result.events) {
+    if ((ev.endsAt ?? ev.startsAt).getTime() < notBefore) {
+      summary.skippedPast++;
+      continue;
+    }
     const category = categoryBySlug.get(pickCategorySlug(ev, scraper.defaultCategorySlug)) ?? fallbackCategory;
     const key = { sourceName: scraper.sourceType, externalId: ev.externalId, startsAt: ev.startsAt };
     const data = {
@@ -229,6 +242,7 @@ export async function runScraperForSource(
   summary.ok = true;
   summary.status =
     `success: ${summary.created} new, ${summary.updated} updated` +
+    (summary.skippedPast ? `, ${summary.skippedPast} already past` : "") +
     (summary.duplicates ? `, ${summary.duplicates} flagged duplicate` : "") +
     ` (${result.strategy}${result.confidence === "low" ? ", low confidence -> DRAFT" : ""})` +
     provenance;

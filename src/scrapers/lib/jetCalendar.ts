@@ -1,6 +1,6 @@
 import type { ScrapedEvent } from "../types";
 import { absoluteUrl, slugify, stripTags } from "./html";
-import { marbellaTimeToUtc, startOfTodayInMarbella } from "../../lib/datetime";
+import { marbellaTimeToUtc } from "../../lib/datetime";
 
 // Parser for JetEngine's (Crocoblock) "Listing Calendar" Elementor
 // widget -- a month grid of `jet-calendar-week__day` cells, each with a
@@ -90,7 +90,6 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
   if (!grid) return { events: [], datesExplicit: false, label: "no jet-calendar-grid" };
 
   const { month, year, explicit } = detectMonthYear(grid);
-  const notBefore = startOfTodayInMarbella().getTime();
   const events: ScrapedEvent[] = [];
 
   for (const cell of blocks(grid, "jet-calendar-week__day")) {
@@ -113,8 +112,6 @@ export function parseJetCalendar(html: string, pageUrl: string): JetCalendarResu
       const rest = lines.slice(1);
       const time = parseTime(rest.join(" ")) ?? parseTime(title) ?? { hour: 0, minute: 0 };
       const startsAt = marbellaTimeToUtc(year, month, day, time.hour, time.minute);
-      if (startsAt.getTime() < notBefore) continue;
-
       const href = firstHref(block, pageUrl);
       const dayKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       events.push({

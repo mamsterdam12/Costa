@@ -93,7 +93,8 @@ async function main() {
       key: "ayuntamiento-marbella",
       name: "Ayuntamiento de Marbella (Turismo agenda)",
       url: "https://turismo.marbella.es/agenda.html",
-      sourceType: "html-listing",
+      // Has a scraper: src/scrapers/turismoMarbella.ts (see registry.ts).
+      sourceType: "turismo-marbella",
       purpose: "EVENTS",
     },
     {
