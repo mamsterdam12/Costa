@@ -76,9 +76,13 @@ async function addDetails(
   force?: boolean
 ): Promise<void> {
   let read = 0;
-  let enriched = 0;
+  const gained = { time: 0, place: 0, price: 0, text: 0, image: 0 };
+  // A host that refuses one detail page refuses all of them; asking
+  // twenty more times is both pointless and rude.
+  const refusing = new Set<string>();
   for (const ev of events) {
     if (read >= MAX_DETAIL_PAGES) break;
+    if (ev.sourceUrl && refusing.has(new URL(ev.sourceUrl).host)) continue;
     if (!ev.sourceUrl || listingUrls.has(ev.sourceUrl)) continue;
     // Only ever the source's own site: a listing links out to ticket
     // shops and social media too, and those aren't ours to crawl.
@@ -99,15 +103,28 @@ async function addDetails(
         ev.description = details.description;
       }
       ev.imageUrl ??= details.imageUrl;
-      if (details.found.length) enriched++;
-      else summary.notes.push(`${ev.title}: detail page had nothing we could read`);
+      if (details.time) gained.time++;
+      if (details.venueName) gained.place++;
+      if (details.costType && details.costType !== "UNKNOWN") gained.price++;
+      if (details.description) gained.text++;
+      if (details.imageUrl) gained.image++;
+      if (read <= 2) summary.notes.push(`"${ev.title}" detail: ${details.found.join(", ") || "nothing"}`);
     } catch (err) {
-      summary.notes.push(
-        `${ev.title}: detail page not read (${err instanceof Error ? err.message : err})`
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof FetchRefused) {
+        refusing.add(new URL(ev.sourceUrl).host);
+        summary.notes.push(`detail pages on ${new URL(ev.sourceUrl).host} refused: ${err.detail}`);
+      } else {
+        summary.notes.push(`${ev.title}: detail page not read (${message})`);
+      }
     }
   }
-  if (read) summary.notes.push(`detail pages: ${read} read, ${enriched} added something`);
+  if (read) {
+    summary.notes.push(
+      `detail pages: ${read} read -- ${gained.time} with a time, ${gained.place} with a place, ` +
+        `${gained.price} with a price, ${gained.text} with a description, ${gained.image} with a picture`
+    );
+  }
 }
 
 // Runs the scraper registered for this Source's sourceType and writes
@@ -323,9 +340,7 @@ export async function runScraperForSource(
     // The source's own poster beats anything we could generate, so it is
     // tried first; generation stays as the fallback for sources that
     // publish no picture at all.
-    if (ev.imageUrl && !event.imageKey) {
-      await importEventImage(event, ev.imageUrl);
-    }
+    if (ev.imageUrl) await importEventImage(event, ev.imageUrl);
 
     await getOrGenerateEventImageUrl({
       id: event.id,

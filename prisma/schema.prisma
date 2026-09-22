@@ -236,6 +236,12 @@ model Event {
   // published it. Null means the picture is ours (or there is none).
   imageUrl String?
 
+  // Dimensions of the stored picture. Recorded because a source answers
+  // with a valid image for events that have none -- a spacer, an icon --
+  // and only its size on screen tells them apart.
+  imageWidth  Int?
+  imageHeight Int?
+
   region   Region @relation(fields: [regionId], references: [id])
   regionId String
 

@@ -7,6 +7,7 @@ import { extractEvents } from "./lib/extract";
 import { parseJetCalendar } from "./lib/jetCalendar";
 import { classifyCost, extractDetails } from "./lib/detail";
 import { atTimeInMarbella } from "./lib/dates";
+import { imageSize } from "../lib/imageMeta";
 import type { PageResult } from "./lib/fetcher";
 import { turismoMarbellaScraper } from "./turismoMarbella";
 import { MARBELLA_TZ, marbellaDay } from "../lib/datetime";
@@ -165,6 +166,20 @@ async function main() {
   );
   check("a price in euros is not free", classifyCost("12 € por persona").costType, "PAID");
   check("no price stated stays unknown", classifyCost("Aforo limitado").costType, "UNKNOWN");
+
+  console.log("image headers:");
+  // A PNG says its size in bytes 16-24; a JPEG in its SOF0 segment.
+  const png = Buffer.alloc(24);
+  png.writeUInt32BE(0x89504e47, 0);
+  png.writeUInt32BE(1080, 16);
+  png.writeUInt32BE(1350, 20);
+  check("png dimensions", imageSize(png), { width: 1080, height: 1350 });
+  const jpg = Buffer.from([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00,
+    0xff, 0xc0, 0x00, 0x11, 0x08, 0x02, 0x58, 0x03, 0x20, 0x03,
+  ]);
+  check("jpeg dimensions", imageSize(jpg), { width: 800, height: 600 });
+  check("anything else is unreadable", imageSize(Buffer.from("not an image")), null);
 
   console.log("feed:");
   check("finds the advertised feed", findFeedUrls(html, "https://turismo.marbella.es/agenda.html"), [
