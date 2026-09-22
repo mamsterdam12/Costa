@@ -33,6 +33,9 @@ const LABELS = {
     "lugar", "ubicacion", "ubicación", "donde", "dónde", "sitio", "direccion", "dirección",
     "venue", "location", "place", "address", "plaats", "locatie", "adres",
   ],
+  street: ["direccion", "dirección", "street", "straat", "adres", "address"],
+  postcode: ["codigo postal", "código postal", "cp", "postcode", "zip"],
+  town: ["municipio", "localidad", "ciudad", "town", "city", "plaats"],
   price: [
     "precio", "precios", "entrada", "entradas", "coste", "tarifa", "price", "tickets",
     "admission", "cost", "prijs", "toegang", "toegangsprijs",
@@ -137,6 +140,18 @@ export function eventImages(html: string, pageUrl: string, title: string): strin
   return [...new Set(ordered)].slice(0, 4);
 }
 
+// Pages that declare no summary still have one: the longest paragraph
+// of real prose on the page, which is the event's own text far more
+// often than it is navigation or boilerplate.
+function longestParagraph(html: string): string | null {
+  let best = "";
+  for (const m of html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const text = stripTags(m[1]).replace(/\s+/g, " ").trim();
+    if (text.length > best.length && text.length < 1500 && /[.!?]/.test(text)) best = text;
+  }
+  return best.length > 60 ? best : null;
+}
+
 export function extractDetails(page: PageResult, title: string): EventDetails {
   const details: EventDetails = { imageUrls: [], found: [] };
   const text = stripTags(page.html);
@@ -187,10 +202,15 @@ export function extractDetails(page: PageResult, title: string): EventDetails {
       }
     }
   }
-  if (placeRow) {
-    details.venueName ??= placeRow;
-    details.address ??= placeRow;
-  }
+  if (placeRow) details.venueName ??= placeRow;
+  // The city's pages keep the street, the postcode and the town in rows
+  // of their own; together they are the address, and "Lugar" is the
+  // venue's name, not where it is.
+  const street = valueFor(values, LABELS.street);
+  const postcode = valueFor(values, LABELS.postcode);
+  const town = valueFor(values, LABELS.town);
+  const composed = [street, [postcode, town].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  details.address ??= composed || placeRow || undefined;
   if (priceRow && (details.costType ?? "UNKNOWN") === "UNKNOWN") {
     const cost = classifyCost(priceRow);
     if (cost.costType !== "UNKNOWN") {
@@ -206,7 +226,9 @@ export function extractDetails(page: PageResult, title: string): EventDetails {
   if (priceRow) details.found.push(`price="${priceRow.slice(0, 40)}"`);
 
   // 3. The page's own summary and picture.
-  const summary = metaContent(page.html, ["og:description", "description", "twitter:description"]);
+  const summary =
+    metaContent(page.html, ["og:description", "description", "twitter:description"]) ??
+    longestParagraph(page.html);
   if (summary && summary.length > 20) {
     details.description = summary;
     details.found.push("description");

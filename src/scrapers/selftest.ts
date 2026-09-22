@@ -151,6 +151,8 @@ async function main() {
   const details = extractDetails(detailPage, "Carnaval Moraga");
   check("reads the starting time", details.time, { hour: 20, minute: 0 });
   check("reads the place", details.venueName, "Boulevard Pablo Ráez");
+  check("keeps the venue name apart from the address", details.venueName, "Boulevard Pablo Ráez");
+  check("builds the address from its own rows", details.address, "Boulevard Pablo Ráez s/n, 29601 Marbella");
   check("reads free admission", [details.costType, details.costAmount], ["FREE", undefined]);
   check("reads the summary", details.description?.startsWith("XXI Moraga Carnavalesca"), true);
   check(
@@ -181,6 +183,11 @@ async function main() {
   );
   check("the thumbnail is never a candidate", plain.imageUrls.some((u) => u.includes("thumb")), false);
   check("time read from a sentence", plain.time, { hour: 21, minute: 0 });
+  check(
+    "a page without og tags still yields its text",
+    plain.description,
+    "El show comienza a las 21:00 en el Teatro Ciudad de Marbella."
+  );
 
   console.log("image headers:");
   // A PNG says its size in bytes 16-24; a JPEG in its SOF0 segment.
